@@ -91,62 +91,85 @@ def collision_filter():
 bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
 puck_poses, _, _, t = read_bag(bag)
 
-def filtposes(poses):
-    for i in range(poses.shape[0]):
-        poses[i, 3:6] = p.getEulerFromQuaternion(poses[i, 3:7])
+# def filtposes(poses):
+#     for i in range(poses.shape[0]):
+#         poses[i, 3:6] = p.getEulerFromQuaternion(poses[i, 3:7])
+#
+#     b, a = signal.ellip(4, 0.0001, 100, 0.5)
+#
+#     sos_butter = signal.butter(4, 0.125, output='sos')
+#
+#     filtered_ellip = np.zeros((poses.shape))
+#
+#     filtered_butter = np.zeros((poses.shape))
+#
+#     for i in range(6):
+#
+#         filtered_ellip[:, i] = signal.filtfilt(b,a, poses[:,i])
+#
+#         filtered_butter[:, i] = signal.sosfiltfilt(sos_butter, poses[:,i])
+#
+#
+#
+#     return poses, filtered_ellip, filtered_butter
+#
+# def get_vel(poses):
+#
+#     t_series = np.linspace(0, t, poses.shape[0])
+#     t_int_series = np.linspace(0, t, 10000)
+#     puck_itpl= np.zeros((len(t_int_series), poses.shape[1]))
+#     for i in range(8):
+#         fpuck = interpolate.interp1d(t_series, poses[:, i], kind='linear')
+#         puck_itpl[:, i] = fpuck(t_int_series)
+#     slope = np.zeros((10000, 8))
+#     h= 100
+#     t_stueck = t / 10000.
+#     for i in range(puck_itpl.shape[0]):  # Differenzenquotienten
+#         if i > 9000:
+#             slope[i,:] = np.zeros((1,8))
+#             break
+#         slope[i, :] = (puck_itpl[i + h, :] - puck_itpl[i, :]) / (h * t_stueck )
+#
+#
+#     return puck_itpl, t_int_series, slope
+#
+# def slope2init(slope, t_series):
+#     b, a = signal.ellip(4, 0.0001, 100, 0.9)
+#     filterslope = np.zeros((slope.shape))
+#     for i in range(6):
+#         filterslope[:, i] = signal.filtfilt(b, a, slope[:, i])
+#     initvel = np.zeros((1, 6))
+#     idx = np.argmax(np.absolute(filterslope), axis=0)
+#     for i, j in zip(idx, range(2)):
+#         initvel[:,j] = filterslope[i, j]
+#     initvel[0,2] = 0
+#     initvel[0, 3:6] = filterslope[idx[0], 3:6]
+#     plt.plot(t_series, filterslope[:, 0], label='filter')
+#
+#     return initvel, filterslope
 
-    b, a = signal.ellip(4, 0.0001, 100, 0.5)
-
-    sos_butter = signal.butter(4, 0.125, output='sos')
-
-    filtered_ellip = np.zeros((poses.shape))
-
-    filtered_butter = np.zeros((poses.shape))
-
-    for i in range(6):
-
-        filtered_ellip[:, i] = signal.filtfilt(b,a, poses[:,i])
-
-        filtered_butter[:, i] = signal.sosfiltfilt(sos_butter, poses[:,i])
-
-
-
-    return poses, filtered_ellip, filtered_butter
-
-def get_vel(poses):
-
-    t_series = np.linspace(0, t, poses.shape[0])
-    t_int_series = np.linspace(0, t, 10000)
-    puck_itpl= np.zeros((len(t_int_series), poses.shape[1]))
-    for i in range(8):
-        fpuck = interpolate.interp1d(t_series, poses[:, i], kind='linear')
-        puck_itpl[:, i] = fpuck(t_int_series)
-    slope = np.zeros((10000, 8))
-    h= 100
-    t_stueck = t / 10000.
-    for i in range(puck_itpl.shape[0]):  # Differenzenquotienten
-        if i > 9000:
-            slope[i,:] = np.zeros((1,8))
+def Diff(data, h):
+    slope = np.zeros(data.shape)
+    t_stueck = t / data.shape[0]
+    for i in range(data.shape[0]):  # Differenzenquotienten
+        if i > data.shape[0] - h - 1:
+            slope[i, :] = np.zeros((1, data.shape[1]))
             break
-        slope[i, :] = (puck_itpl[i + h, :] - puck_itpl[i, :]) / (h * t_stueck )
+        slope[i, :] = np.linalg.norm((data[i + h, :] - data[i, :]).reshape(-1,1), axis=1) / (h * t_stueck)
 
 
-    return puck_itpl, t_int_series, slope
+    return slope, np.linspace(0, t, data.shape[0])
 
-def slope2init(slope, t_series):
-    b, a = signal.ellip(4, 0.0001, 100, 0.9)
-    filterslope = np.zeros((slope.shape))
-    for i in range(6):
-        filterslope[:, i] = signal.filtfilt(b, a, slope[:, i])
-    initvel = np.zeros((1, 6))
-    idx = np.argmax(np.absolute(filterslope), axis=0)
-    for i, j in zip(idx, range(2)):
-        initvel[:,j] = filterslope[i, j]
-    initvel[0,2] = 0
-    initvel[0, 3:6] = filterslope[idx[0], 3:6]
-    plt.plot(t_series, filterslope[:, 0], label='filter')
+def initdata(posedata):
+    # posestart = posedata[354:, :]
+    posestart = posedata
+    posestart[:, 2] = 0.1172 * np.ones(posestart.shape[0])
+    for i in range(posestart.shape[0]):
+        posestart[i,3:6] = p.getEulerFromQuaternion(posestart[i,3:7])
+    puck_posori = posestart[:,:6]
+    puck_posori[:,3:5] = np.zeros(puck_posori[:,3:5].shape)
 
-    return initvel, filterslope
+    return puck_posori
 
 
 p.connect(p.GUI, 1234) # use build-in graphical user interface, p.DIRECT: pass the final results
@@ -161,19 +184,26 @@ table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
 file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
 puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
 
-posestart = puck_poses[354:, :]
-poses, Poses_el, Poses_bu = filtposes(posestart)
-_, t_series, slope = get_vel(poses)
 
 
-vel, _ = slope2init(slope, t_series)
-posestart[:, 2] = 0.1172 * np.ones(posestart.shape[0])
+puck_posori = initdata(puck_poses)
+initvel, t_series =Diff(puck_posori, 40)
+
+b, a = signal.butter(4, 0.09)
+filtervel = np.zeros((initvel.shape))
+for i in range(6):
+    filtervel[:, i] = signal.filtfilt(b, a, initvel[:, i])
+plt.plot(t_series, filtervel[:,0], label='x')
+plt.plot(t_series, filtervel[:,1], label='y')
+plt.plot(t_series, filtervel[:,2], label='z')
+plt.plot(t_series, filtervel[:,3], label='wx')
+plt.plot(t_series, filtervel[:,4], label='wy')
+# plt.plot(t_series, filtervel[:,5], label='wz')
+plt.ylim(0,4)
+plt.legend()
+plt.show()
 readidx = 0
 
-# p.changeDynamics(puck, -1, spinningFriction=0)
-# p.changeDynamics(puck, -1, rollingFriction=0)
-# p.changeDynamics(puck, -1, restitution=0.85)
-# p.changeDynamics(table, 0, lateralFriction=0)
 for linkidx in range(8):
     p.changeDynamics(table, linkidx, spinningFriction=0.01)
     p.changeDynamics(table, linkidx, restitution=0.845)
