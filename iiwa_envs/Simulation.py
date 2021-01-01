@@ -148,17 +148,34 @@ puck_poses, _, _, t = read_bag(bag)
 #
 #     return initvel, filterslope
 
+# def Diff(data, h):
+#     slope = np.zeros(data.shape)
+#     t_stueck = t / data.shape[0]
+#     for i in range(data.shape[0]):  # Differenzenquotienten
+#         if i > data.shape[0] - h - 1:
+#             slope[i, :] = np.zeros((1, data.shape[1]))
+#             break
+#         slope[i, :] = np.linalg.norm((data[i + h, :] - data[i, :]).reshape(-1,1), axis=1) / (h * t_stueck)
+#
+#
+#     return slope, np.linspace(0, t, data.shape[0])
+
 def Diff(data, h):
-    slope = np.zeros(data.shape)
+    slope = np.zeros((data.shape[0], 2))
+    data_ = np.zeros((data.shape[0], 2))
+
+    data_[:, 0] = np.linalg.norm(data[:, :2], axis=1, keepdims=True)
+    data_[:, 1] = data[:, 2]
     t_stueck = t / data.shape[0]
     for i in range(data.shape[0]):  # Differenzenquotienten
         if i > data.shape[0] - h - 1:
             slope[i, :] = np.zeros((1, data.shape[1]))
             break
-        slope[i, :] = np.linalg.norm((data[i + h, :] - data[i, :]).reshape(-1,1), axis=1) / (h * t_stueck)
+        slope[i, :] = (data_[i + h, :] - data_[i, :]) / (h * t_stueck)
 
 
     return slope, np.linspace(0, t, data.shape[0])
+
 
 def initdata(posedata):
     # posestart = posedata[354:, :]
@@ -187,76 +204,92 @@ puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
 
 
 puck_posori = initdata(puck_poses)
-initvel, t_series =Diff(puck_posori, 40)
+initvel, t_series =Diff(np.concatenate((puck_posori[:,:2], puck_posori[:, 5:]), axis=1), 40)
 
-b, a = signal.butter(4, 0.09)
+b, a = signal.butter(6, 0.1) # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
+
 filtervel = np.zeros((initvel.shape))
-for i in range(6):
-    filtervel[:, i] = signal.filtfilt(b, a, initvel[:, i])
-plt.plot(t_series, filtervel[:,0], label='x')
-plt.plot(t_series, filtervel[:,1], label='y')
-plt.plot(t_series, filtervel[:,2], label='z')
-plt.plot(t_series, filtervel[:,3], label='wx')
-plt.plot(t_series, filtervel[:,4], label='wy')
-# plt.plot(t_series, filtervel[:,5], label='wz')
-plt.ylim(0,4)
-plt.legend()
-plt.show()
+
+for i in range(2):
+    filtervel[:, i] = signal.filtfilt(b, a, initvel[:, i], method='gust')
+
+#init plot
+pick = [0,1,2]
+label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
+color = ('r','g','b','k','y','g')
+vel = np.zeros(len(pick),)
+fig, axes = plt.subplots(len(pick), 1)
+def bagplotvel():
+
+    for i, p in enumerate(pick):
+        idx = np.argmax(filtervel[:, p])
+        vel[i] = filtervel[idx, p]
+        axes[i].scatter(t_series[idx], vel[i], edgecolors='red', s=20)
+        axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
+
+
+        axes[i].plot(t_series, filtervel[:, p], label=label[p], color=color[i])
+    fig.legend()
+    return vel
+
+vel = bagplotvel()
+
 readidx = 0
+posestart = puck_poses[354:, :]
 
 for linkidx in range(8):
     p.changeDynamics(table, linkidx, spinningFriction=0.01)
     p.changeDynamics(table, linkidx, restitution=0.845)
 
-while True:
 
-    while readidx != posestart.shape[0]:
-        p.stepSimulation()
-        if readidx == 0:
-            lastpuck = posestart[readidx, 0:3]
 
-        p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-        p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+while readidx != posestart.shape[0]:
+    p.stepSimulation()
+    if readidx == 0:
         lastpuck = posestart[readidx, 0:3]
-        readidx += 1
 
-    poses_pos = []
-    poses_ang = []
-    realvel = []
-    readidx = 0
-    p.setRealTimeSimulation(1)
+    p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+    p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+    lastpuck = posestart[readidx, 0:3]
+    readidx += 1
 
-    while readidx < 2000:
-        p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-        p.resetBaseVelocity(puck, linearVelocity=vel[0, :3], angularVelocity=vel[0, 3:6])
-        p.stepSimulation()
+poses_pos = []
+poses_ang = []
+realvel = []
+readidx = 0
+p.setRealTimeSimulation(1)
+# p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
+p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+p.resetBaseVelocity(puck, linearVelocity=vel[:3], angularVelocity=vel[3:6])
+p.stepSimulation()
 
-        while readidx < 2000:
+while readidx < filtervel.shape[0]:
 
-            collision_filter()
-            if readidx == 0:
-                lastpuck = posestart[readidx, 0:3]
-                poses_pos.append(lastpuck)
-                poses_ang.append(posestart[readidx, 3:7])
-            realvel.append(p.getBaseVelocity(puck)[0])
-            recordpos, recordang = p.getBasePositionAndOrientation(puck)
-            poses_pos.append(recordpos)
-            poses_ang.append(recordang)
+    collision_filter()
+    if readidx == 0:
+        lastpuck = posestart[readidx, 0:3]
+        poses_pos.append(lastpuck)
+        poses_ang.append(posestart[readidx, 3:7])
+    realvel.append(p.getBaseVelocity(puck)[0] + p.getBaseVelocity(puck)[1])
+    recordpos, recordang = p.getBasePositionAndOrientation(puck)
+    poses_pos.append(recordpos)
+    poses_ang.append(recordang)
 
-            p.addUserDebugLine(lastpuck, recordpos, lineColorRGB= [0.1,0.1,0.5], lineWidth=5)
+    p.addUserDebugLine(lastpuck, recordpos, lineColorRGB= [0.1,0.1,0.5], lineWidth=5)
 
-            lastpuck = recordpos
-            readidx += 1
-            # print(len(poses_pos), len(poses_ang))
-            # time.sleep(1. / 240)
+    lastpuck = recordpos
+    readidx += 1
 
 
+    # print(len(poses_pos), len(poses_ang))
+    # time.sleep(1. / 240)
 
 
-    # vel, _ = slope2init(np.asarry(poses_pos[:,0]))
-    realvel = np.array(realvel)
-    print('checkbagshape', np.array(vel).shape, 'checkrealshape', np.array(realvel).shape )
-    print(np.linalg.norm(slope[:2000, :3] - realvel))
-    # print(vel)
-    plt.legend()
-    plt.show()
+
+
+realvel = np.array(realvel)
+# print('checkbagshape', np.array(vel).shape, 'checkrealshape', np.array(realvel).shape )
+for i in pick:
+    axes[i].plot(t_series, realvel[:, i])
+plt.legend()
+plt.show()
