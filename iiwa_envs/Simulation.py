@@ -91,103 +91,64 @@ def collision_filter():
 bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
 puck_poses, _, _, t = read_bag(bag)
 
-# def filtposes(poses):
-#     for i in range(poses.shape[0]):
-#         poses[i, 3:6] = p.getEulerFromQuaternion(poses[i, 3:7])
-#
-#     b, a = signal.ellip(4, 0.0001, 100, 0.5)
-#
-#     sos_butter = signal.butter(4, 0.125, output='sos')
-#
-#     filtered_ellip = np.zeros((poses.shape))
-#
-#     filtered_butter = np.zeros((poses.shape))
-#
-#     for i in range(6):
-#
-#         filtered_ellip[:, i] = signal.filtfilt(b,a, poses[:,i])
-#
-#         filtered_butter[:, i] = signal.sosfiltfilt(sos_butter, poses[:,i])
-#
-#
-#
-#     return poses, filtered_ellip, filtered_butter
-#
-# def get_vel(poses):
-#
-#     t_series = np.linspace(0, t, poses.shape[0])
-#     t_int_series = np.linspace(0, t, 10000)
-#     puck_itpl= np.zeros((len(t_int_series), poses.shape[1]))
-#     for i in range(8):
-#         fpuck = interpolate.interp1d(t_series, poses[:, i], kind='linear')
-#         puck_itpl[:, i] = fpuck(t_int_series)
-#     slope = np.zeros((10000, 8))
-#     h= 100
-#     t_stueck = t / 10000.
-#     for i in range(puck_itpl.shape[0]):  # Differenzenquotienten
-#         if i > 9000:
-#             slope[i,:] = np.zeros((1,8))
-#             break
-#         slope[i, :] = (puck_itpl[i + h, :] - puck_itpl[i, :]) / (h * t_stueck )
-#
-#
-#     return puck_itpl, t_int_series, slope
-#
-# def slope2init(slope, t_series):
-#     b, a = signal.ellip(4, 0.0001, 100, 0.9)
-#     filterslope = np.zeros((slope.shape))
-#     for i in range(6):
-#         filterslope[:, i] = signal.filtfilt(b, a, slope[:, i])
-#     initvel = np.zeros((1, 6))
-#     idx = np.argmax(np.absolute(filterslope), axis=0)
-#     for i, j in zip(idx, range(2)):
-#         initvel[:,j] = filterslope[i, j]
-#     initvel[0,2] = 0
-#     initvel[0, 3:6] = filterslope[idx[0], 3:6]
-#     plt.plot(t_series, filterslope[:, 0], label='filter')
-#
-#     return initvel, filterslope
+def filter(data, Wn=0.1):
+    b, a = signal.butter(6, Wn)  # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
 
-# def Diff(data, h):
-#     slope = np.zeros(data.shape)
-#     t_stueck = t / data.shape[0]
-#     for i in range(data.shape[0]):  # Differenzenquotienten
-#         if i > data.shape[0] - h - 1:
-#             slope[i, :] = np.zeros((1, data.shape[1]))
-#             break
-#         slope[i, :] = np.linalg.norm((data[i + h, :] - data[i, :]).reshape(-1,1), axis=1) / (h * t_stueck)
-#
-#
-#     return slope, np.linspace(0, t, data.shape[0])
+    for i in range(data.shape[1]):
+        data[:, i] = signal.filtfilt(b, a, data[:, i], method='gust')
+    return data
 
 def Diff(data, h):
-    slope = np.zeros((data.shape[0], 2))
-    data_ = np.zeros((data.shape[0], 2))
+    slope = np.zeros((data.shape))
+    # data_ = np.zeros((data.shape[0], 2))
 
-    data_[:, 0] = np.linalg.norm(data[:, :2], axis=1, keepdims=True)
-    data_[:, 1] = data[:, 2]
+#   data changed after using, so .copy is necessary
+#   tradeoff: large Wn, good coincidence with original traj, position noised. small Wn, bad coincidence with ori. traj at corner, position less noised
+#   in order to get initial velocity, here ignore the corer precision with small Wn
+    data2 = filter(data.copy(), 0.5)
+
+    # data_[:, 0] = np.linalg.norm(data[:, :2], axis=1)
+    # data_[:, 1] = data[:, 2]   # position already exist noise
+
+
+
+
+
     t_stueck = t / data.shape[0]
     for i in range(data.shape[0]):  # Differenzenquotienten
         if i > data.shape[0] - h - 1:
             slope[i, :] = np.zeros((1, data.shape[1]))
             break
-        slope[i, :] = (data_[i + h, :] - data_[i, :]) / (h * t_stueck)
+        slope[i, :] = (data[i + h, :] - data[i, :]) / (h * t_stueck)
 
+
+    slope2 = filter(slope.copy(), 0.5)
+    slope3 = filter(slope.copy(), 0.1)
+    slope4 = filter(slope.copy(), 0.085)
+    slope5 = filter(slope.copy(), 0.070)
+
+# for stoppoint before return:
+    # plt.plot(np.linspace(0, t, data.shape[0]), slope[:,0], ls='-', label='raw', color='r'),  plt.plot(np.linspace(0, t, data.shape[0]), slope2[:,0],ls='-', label='Wn=0.5', color='b'),  plt.plot(np.linspace(0, t, data.shape[0]), slope3[:,0],ls='-', label='Wn=0.1', color='y'), plt.plot(np.linspace(0, t, data.shape[0]), slope4[:,0],ls='-', label='Wn=0.05', color='k'), plt.plot(np.linspace(0, t, data.shape[0]), slope5[:,0],ls='-', label='Wn=0.01', color='purple')
 
     return slope, np.linspace(0, t, data.shape[0])
 
 
 def initdata(posedata):
-    # posestart = posedata[354:, :]
-    posestart = posedata
+    posestart = posedata[354:, :]
+    # posestart = posedata
     posestart[:, 2] = 0.1172 * np.ones(posestart.shape[0])
     for i in range(posestart.shape[0]):
         posestart[i,3:6] = p.getEulerFromQuaternion(posestart[i,3:7])
     puck_posori = posestart[:,:6]
     puck_posori[:,3:5] = np.zeros(puck_posori[:,3:5].shape)
 
-    return puck_posori
+    puck_posori2 = np.concatenate((puck_posori[:, :2], puck_posori[:, 5:]), axis=1)
+    data_ = np.zeros((puck_posori2.shape[0], 2))
 
+    data_[:, 0] = np.linalg.norm(puck_posori2[:, :2], axis=1)
+    data_[:, 1] = puck_posori2[:, 2]   # position already exist noise
+
+    return puck_posori, data_
 
 p.connect(p.GUI, 1234) # use build-in graphical user interface, p.DIRECT: pass the final results
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -203,39 +164,47 @@ puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
 
 
 
-puck_posori = initdata(puck_poses)
-initvel, t_series =Diff(np.concatenate((puck_posori[:,:2], puck_posori[:, 5:]), axis=1), 40)
-
-b, a = signal.butter(6, 0.1) # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
-
-filtervel = np.zeros((initvel.shape))
-
-for i in range(2):
-    filtervel[:, i] = signal.filtfilt(b, a, initvel[:, i], method='gust')
+puck_posori_6, puck_posori_2 = initdata(puck_poses)
+speed, t_series =Diff(puck_posori_2, 10)
 
 #init plot
-pick = [0,1,2]
+pick = [0,1,5]
 label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
 color = ('r','g','b','k','y','g')
-vel = np.zeros(len(pick),)
-fig, axes = plt.subplots(len(pick), 1)
-def bagplotvel():
+# vel = np.zeros(len(pick),)
+# fig, axes = plt.subplots(len(pick), 1)
+# def bagplotvel():
+#     # getori =
+#     for i in pick:
+#         idx = np.argmax(filtervel[:, p])
+#         vel[i] = filtervel[idx, p]
+#         axes[i].scatter(t_series[idx], vel[i], edgecolors='red', s=20)
+#         axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
+#
+#
+#         axes[i].plot(t_series, filtervel[:, p], label=label[p], color=color[i])
+#     fig.legend()
+#     return vel
 
-    for i, p in enumerate(pick):
-        idx = np.argmax(filtervel[:, p])
-        vel[i] = filtervel[idx, p]
-        axes[i].scatter(t_series[idx], vel[i], edgecolors='red', s=20)
-        axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
+# vel = bagplotvel()
 
-
-        axes[i].plot(t_series, filtervel[:, p], label=label[p], color=color[i])
-    fig.legend()
-    return vel
-
-vel = bagplotvel()
-
-readidx = 0
 posestart = puck_poses[354:, :]
+readidx = 0
+tan_theta = (posestart[25, :2] - posestart[0, :2])[1] / (posestart[25, :2] - posestart[0, :2])[0]
+cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
+sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1)
+initori = [cos_theta, sin_theta]
+
+linvel = np.zeros((2,))
+for i, s in enumerate(speed[:,0]):
+    if s> 2.9:
+        linvel = speed[i,0]
+        angvel = speed[i,1]
+        break
+
+init_linvel = np.hstack(( linvel * np.array(initori), 0 ))
+init_angvel = np.hstack(([0,0], angvel))
+
 
 for linkidx in range(8):
     p.changeDynamics(table, linkidx, spinningFriction=0.01)
@@ -260,10 +229,10 @@ readidx = 0
 p.setRealTimeSimulation(1)
 # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
 p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-p.resetBaseVelocity(puck, linearVelocity=vel[:3], angularVelocity=vel[3:6])
+p.resetBaseVelocity(puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
 p.stepSimulation()
 
-while readidx < filtervel.shape[0]:
+while readidx < speed.shape[0]:
 
     collision_filter()
     if readidx == 0:
@@ -285,11 +254,28 @@ while readidx < filtervel.shape[0]:
     # time.sleep(1. / 240)
 
 
+fig, axes = plt.subplots(len(pick), 1)
+
+def pltvel(vel, classify):
+    # getori =
+    for i,p in enumerate(pick): # 0 1 5
+        # vel[i] = vel[idx, i]
+        # axes[i].scatter(t_series[idx], vel[i], edgecolors='red', s=20)
+        # axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
+        if classify == 'bag':
+            axes[i].plot(t_series, vel[:, p], label=classify + label[i], color=color[i])
+        elif classify == 'real':
+            axes[i].plot(t_series, vel[:, p], label=classify + label[i], color=color[i], alpha=0.4)
 
 
-realvel = np.array(realvel)
+
+bagvel,_ = Diff(puck_posori_6, 10)
+pltvel(bagvel, 'bag')
+pltvel(np.array(realvel),'real')
+
+# realvel = np.array(realvel)
 # print('checkbagshape', np.array(vel).shape, 'checkrealshape', np.array(realvel).shape )
-for i in pick:
-    axes[i].plot(t_series, realvel[:, i])
-plt.legend()
+# for i in pick:
+#     axes[i].plot(t_series, realvel[:, i])
+fig.legend()
 plt.show()
