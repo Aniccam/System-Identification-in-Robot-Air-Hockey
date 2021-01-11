@@ -88,55 +88,36 @@ def collision_filter():
 #       t_up_rim_l (6),
 #       t_up_rim_r (7)
 
-bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
-puck_poses, _, _, t = read_bag(bag)
 
 def filter(data, Wn=0.1):
-    b, a = signal.butter(6, Wn)  # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
+    b, a = signal.butter(3, Wn)  # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
 
     for i in range(data.shape[1]):
         data[:, i] = signal.filtfilt(b, a, data[:, i], method='gust')
     return data
 
-def Diff(data, h):
+def Diff(data, h, Wn=0.3):
     slope = np.zeros((data.shape))
     # data_ = np.zeros((data.shape[0], 2))
 
 #   data changed after using, so .copy is necessary
 #   tradeoff: large Wn, good coincidence with original traj, position noised. small Wn, bad coincidence with ori. traj at corner, position less noised
 #   in order to get initial velocity, here ignore the corer precision with small Wn
-    data2 = filter(data.copy(), 0.5)
-
-    # data_[:, 0] = np.linalg.norm(data[:, :2], axis=1)
-    # data_[:, 1] = data[:, 2]   # position already exist noise
-
-
-
-
-
+#     data = filter(data.copy(), 0.7)
     t_stueck = t / data.shape[0]
     for i in range(data.shape[0]):  # Differenzenquotienten
         if i > data.shape[0] - h - 1:
             slope[i, :] = np.zeros((1, data.shape[1]))
             break
         slope[i, :] = (data[i + h, :] - data[i, :]) / (h * t_stueck)
-
-
-    slope2 = filter(slope.copy(), 0.5)
-    slope3 = filter(slope.copy(), 0.1)
-    slope4 = filter(slope.copy(), 0.085)
-    slope5 = filter(slope.copy(), 0.070)
-
-# for stoppoint before return:
-    # plt.plot(np.linspace(0, t, data.shape[0]), slope[:,0], ls='-', label='raw', color='r'),  plt.plot(np.linspace(0, t, data.shape[0]), slope2[:,0],ls='-', label='Wn=0.5', color='b'),  plt.plot(np.linspace(0, t, data.shape[0]), slope3[:,0],ls='-', label='Wn=0.1', color='y'), plt.plot(np.linspace(0, t, data.shape[0]), slope4[:,0],ls='-', label='Wn=0.05', color='k'), plt.plot(np.linspace(0, t, data.shape[0]), slope5[:,0],ls='-', label='Wn=0.01', color='purple')
+    slope = filter(slope.copy(), Wn)
 
     return slope, np.linspace(0, t, data.shape[0])
-
 
 def initdata(posedata):
     posestart = posedata[354:, :]
     # posestart = posedata
-    posestart[:, 2] = 0.1172 * np.ones(posestart.shape[0])
+    posestart[:, 2] = 0.117 * np.ones(posestart.shape[0])
     for i in range(posestart.shape[0]):
         posestart[i,3:6] = p.getEulerFromQuaternion(posestart[i,3:7])
     puck_posori = posestart[:,:6]
@@ -150,111 +131,20 @@ def initdata(posedata):
 
     return puck_posori, data_
 
-p.connect(p.GUI, 1234) # use build-in graphical user interface, p.DIRECT: pass the final results
-p.setAdditionalSearchPath(pybullet_data.getDataPath())
-p.setPhysicsEngineParameter(numSolverIterations=150)
-p.setTimeStep(1 / 240)
-p.setGravity(0., 0., -9.81)
-p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
+def runbag(readidx):
+    while readidx != posestart.shape[0]:
+        p.stepSimulation()
+        if readidx == 0:
+            lastpuck = posestart[readidx, 0:3]
 
-file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
-table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
-puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
-
-
-
-puck_posori_6, puck_posori_2 = initdata(puck_poses)
-speed, t_series =Diff(puck_posori_2, 10)
-
-#init plot
-pick = [0,1,5]
-label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
-color = ('r','g','b','k','y','g')
-# vel = np.zeros(len(pick),)
-# fig, axes = plt.subplots(len(pick), 1)
-# def bagplotvel():
-#     # getori =
-#     for i in pick:
-#         idx = np.argmax(filtervel[:, p])
-#         vel[i] = filtervel[idx, p]
-#         axes[i].scatter(t_series[idx], vel[i], edgecolors='red', s=20)
-#         axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
-#
-#
-#         axes[i].plot(t_series, filtervel[:, p], label=label[p], color=color[i])
-#     fig.legend()
-#     return vel
-
-# vel = bagplotvel()
-
-posestart = puck_poses[354:, :]
-readidx = 0
-tan_theta = (posestart[25, :2] - posestart[0, :2])[1] / (posestart[25, :2] - posestart[0, :2])[0]
-cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
-sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1)
-initori = [cos_theta, sin_theta]
-
-linvel = np.zeros((2,))
-for i, s in enumerate(speed[:,0]):
-    if s> 2.9:
-        linvel = speed[i,0]
-        angvel = speed[i,1]
-        break
-
-init_linvel = np.hstack(( linvel * np.array(initori), 0 ))
-init_angvel = np.hstack(([0,0], angvel))
-
-
-for linkidx in range(8):
-    p.changeDynamics(table, linkidx, spinningFriction=0.01)
-    p.changeDynamics(table, linkidx, restitution=0.845)
-
-
-
-while readidx != posestart.shape[0]:
-    p.stepSimulation()
-    if readidx == 0:
+        p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+        p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
         lastpuck = posestart[readidx, 0:3]
+        readidx += 1
 
-    p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-    p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
-    lastpuck = posestart[readidx, 0:3]
-    readidx += 1
-
-poses_pos = []
-poses_ang = []
-realvel = []
-readidx = 0
-p.setRealTimeSimulation(1)
-# p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
-p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-p.resetBaseVelocity(puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
-p.stepSimulation()
-
-while readidx < speed.shape[0]:
-
-    collision_filter()
-    if readidx == 0:
-        lastpuck = posestart[readidx, 0:3]
-        poses_pos.append(lastpuck)
-        poses_ang.append(posestart[readidx, 3:7])
-    realvel.append(p.getBaseVelocity(puck)[0] + p.getBaseVelocity(puck)[1])
-    recordpos, recordang = p.getBasePositionAndOrientation(puck)
-    poses_pos.append(recordpos)
-    poses_ang.append(recordang)
-
-    p.addUserDebugLine(lastpuck, recordpos, lineColorRGB= [0.1,0.1,0.5], lineWidth=5)
-
-    lastpuck = recordpos
-    readidx += 1
-
-
-    # print(len(poses_pos), len(poses_ang))
-    # time.sleep(1. / 240)
-
-
-fig, axes = plt.subplots(len(pick), 1)
+def givebagtraj():
+    for i in range(posestart.shape[0]):
+        p.addUserDebugLine(posestart[i, 0:3], posestart[i+1, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
 
 def pltvel(vel, classify):
     # getori =
@@ -264,18 +154,135 @@ def pltvel(vel, classify):
         # axes[i].text(t_series[idx]+1.5, vel[i]-0.8, s='('+str(idx)+','+str(round(vel[i],2))+')', color='purple')
         if classify == 'bag':
             axes[i].plot(t_series, vel[:, p], label=classify + label[i], color=color[i])
-        elif classify == 'real':
+        elif classify == 'sim':
             axes[i].plot(t_series, vel[:, p], label=classify + label[i], color=color[i], alpha=0.4)
 
+def analyse():
+    RMSE = 0
+    for i in range(bagvel.shape[0]):
+        if bagvel[i, 0] * simvel[i,0] >0:
+            None
+        else:
+            break
+    RMSE = np.sqrt((np.square(simvel[:i, :]-bagvel[:i, :]))/i)
+
+    return i, np.array(RMSE)
+
+def plt_ERR(acc_ERRs, num):
+    for i,p in enumerate(pick): # 0 1 5
+            axes1[i].plot(np.arange(num), acc_ERRs[:, p], label=label[p], color=color[i])
 
 
-bagvel,_ = Diff(puck_posori_6, 10)
-pltvel(bagvel, 'bag')
-pltvel(np.array(realvel),'real')
+if __name__ == "__main__":
+    bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
+    puck_poses, _, _, t = read_bag(bag)
 
-# realvel = np.array(realvel)
-# print('checkbagshape', np.array(vel).shape, 'checkrealshape', np.array(realvel).shape )
-# for i in pick:
-#     axes[i].plot(t_series, realvel[:, i])
-fig.legend()
-plt.show()
+    p.connect(p.GUI, 1234) # use build-in graphical user interface, p.DIRECT: pass the final results
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    p.setPhysicsEngineParameter(numSolverIterations=150)
+    p.setTimeStep(1 / 240)
+    p.setGravity(0., 0., -9.81)
+    p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
+
+    file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
+    table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+    file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
+    puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
+
+    # for linkidx in range(8):
+    #     p.changeDynamics(table, linkidx, spinningFriction=0.01)
+    #     p.changeDynamics(table, linkidx, restitution=0.845)
+    p.changeDynamics(table, 0, restitution=0.2)
+    p.changeDynamics(table, 1, restitution=1.1)
+    p.changeDynamics(table, 2, restitution=1.1)
+    p.changeDynamics(table, 4, restitution=1)
+    p.changeDynamics(table, 5, restitution=1)
+    p.changeDynamics(table, 6, restitution=0.8)
+    p.changeDynamics(table, 7, restitution=0.8)
+    p.changeDynamics(table, 0, lateralFriction=0.01)
+    p.changeDynamics(puck, 0, restitution=1)
+    puck_posori_6, puck_posori_2 = initdata(puck_poses)
+    speed, t_series =Diff(puck_posori_2, 10, 0.4)
+
+
+    posestart = puck_poses[354:, :]
+    tan_theta = (posestart[25, :2] - posestart[0, :2])[1] / (posestart[25, :2] - posestart[0, :2])[0]
+    cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
+    sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1)
+    initori = [cos_theta, sin_theta]
+
+    linvel = np.zeros((2,))
+    for i, s in enumerate(speed[:,0]):
+        if s > 2.9:
+            linvel = speed[i,0]
+            angvel = speed[i,1]
+            break
+
+    init_linvel = np.hstack(( linvel * np.array(initori), 0 ))
+    init_angvel = np.hstack(([0,0], angvel))
+
+
+
+    readidx = 0
+
+
+
+    poses_pos = []
+    poses_ang = []
+    simvel = []
+    readidx = 0
+    runbag(readidx)
+    p.setRealTimeSimulation(1)
+    # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
+    p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+    p.resetBaseVelocity(puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
+    while readidx < speed.shape[0]:
+        # p.stepSimulation()
+
+        collision_filter()
+        if readidx == 0:
+            lastpuck = posestart[readidx, 0:3]
+            poses_pos.append(lastpuck)
+            poses_ang.append(posestart[readidx, 3:7])
+        simvel.append(p.getBaseVelocity(puck)[0] + p.getBaseVelocity(puck)[1])
+        recordpos, recordang = p.getBasePositionAndOrientation(puck)
+        poses_pos.append(recordpos)
+        poses_ang.append(recordang)
+
+        p.addUserDebugLine(lastpuck, recordpos, lineColorRGB= [0.1,0.1,0.5], lineWidth=5)
+
+        lastpuck = recordpos
+        readidx += 1
+
+
+        # print(len(poses_pos), len(poses_ang))
+        # time.sleep(1. / 240)
+
+
+
+    #init plot
+    pick = [0,1,5]
+    label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
+    color = ('r','g','b','k','y','g')
+    fig, axes = plt.subplots(len(pick), 1)
+    fig1, axes1 = plt.subplots(len(pick), 1)
+
+
+    bagvel,_ = Diff(puck_posori_6, 10, 0.4)
+    pltvel(bagvel, 'bag')
+    pltvel(np.array(simvel),'sim')
+    simvel = np.array(simvel)
+
+
+    i,ERR = analyse()
+    acc_ERRs = np.zeros((ERR.shape))
+    acc_ERR = 0
+    for j in range(i):
+        acc_ERR += ERR[j,:]
+        acc_ERRs[j, :] = acc_ERR
+
+    plt_ERR(acc_ERRs, i)
+
+    fig.legend()
+    fig1.legend()
+    plt.show()
