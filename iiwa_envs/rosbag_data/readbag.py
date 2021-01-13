@@ -179,6 +179,5 @@ if __name__ == "__main__":
 
     plt.show()
 
-    from audio2numpy import open_audio
 
 
