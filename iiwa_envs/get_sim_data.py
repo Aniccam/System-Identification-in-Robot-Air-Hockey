@@ -9,13 +9,19 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 class Model:
-    def __init__(self, hyperparams ):
+    def __init__(self, hyperparams):
 
         self.res0 = hyperparams[0]       # res0
-        self.res12 = hyperparams[1]     # res12
-        self.res45 = hyperparams[2]     # res45
-        self.res67 = hyperparams[3]     # res67
-        self.latf = hyperparams[4]       # latf
+        self.res1 = hyperparams[1]     # res1
+        self.res2 = hyperparams[2]     # res2
+        # self.res3 = hyperparams[3]     # res3
+        self.res4 = hyperparams[3]     # res4
+        self.res5 = hyperparams[4]     # res5
+        # self.res6 = hyperparams[6]     # res6
+        self.res7 = hyperparams[5]     # res7
+        self.res8 = hyperparams[6]     # res58
+        self.latf = hyperparams[7]       # latf
+        # self.id = id
     def read_bag(self, bag):
         mallet_poses = []
         puck_poses = []
@@ -138,16 +144,16 @@ class Model:
 
         return puck_posori, data_
 
-    # def runbag(self, readidx, posestart):
-    #     while readidx != posestart.shape[0]:
-    #         p.stepSimulation()
-    #         if readidx == 0:
-    #             lastpuck = posestart[readidx, 0:3]
-    #
-    #         p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-    #         p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
-    #         lastpuck = posestart[readidx, 0:3]
-    #         readidx += 1
+    def runbag(self, readidx, posestart):
+        while readidx != posestart.shape[0]:
+            p.stepSimulation()
+            if readidx == 0:
+                lastpuck = posestart[readidx, 0:3]
+
+            p.resetBasePositionAndOrientation(self.puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+            p.addUserDebugLine(lastpuck, posestart[readidx, 0:3], lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+            lastpuck = posestart[readidx, 0:3]
+            readidx += 1
 
 # def givebagtraj():
 #     for i in range(posestart.shape[0]):
@@ -179,39 +185,57 @@ class Model:
     #     for i,p in enumerate(pick): # 0 1 5
     #             axes1[i].plot(np.arange(num), acc_ERRs[:, p], label=label[p], color=color[i])
 
-    def get_sim(self):
+    def get_sim(self, connection_mode=None):
         bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
         puck_poses, _, _, self.t = self.read_bag(bag)
-
-        p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
+        # if connection_mode is None:
+        #     self._client = p.connect(p.SHARED_MEMORY)
+        #     if self._client >= 0:
+        #         None
+        #     else:
+        #         connection_mode = p.DIRECT
+        self._client = p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setPhysicsEngineParameter(numSolverIterations=150)
-        p.setTimeStep(1 / 240)
+        # p.setTimeStep(1 / 240)
         p.setGravity(0., 0., -9.81)
         p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
                                      cameraTargetPosition=[1.55, 0.85, 1.])
 
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
-        table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+        self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
-        puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
+        self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
 
         # init plot
         pick = [0, 1, 5]
         label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
         color = ('r', 'g', 'b', 'k', 'y', 'g')
-        fig, axes = plt.subplots(len(pick), 1)
-        fig1, axes1 = plt.subplots(len(pick), 1)
+        # fig, axes = plt.subplots(len(pick), 1)
+        # fig1, axes1 = plt.subplots(len(pick), 1)
 
-        p.changeDynamics(table, 0, restitution=self.res0)  # 0.2
-        p.changeDynamics(table, 1, restitution=self.res12)  # 1.1
-        p.changeDynamics(table, 2, restitution=self.res12)  # 1.1
-        p.changeDynamics(table, 4, restitution=self.res45)  # 1
-        p.changeDynamics(table, 5, restitution=self.res45)  # 1
-        p.changeDynamics(table, 6, restitution=self.res67)  # 0.8
-        p.changeDynamics(table, 7, restitution=self.res67)  # 0.8
-        p.changeDynamics(table, 0, lateralFriction=self.latf)  # 0.01
-        p.changeDynamics(puck, 0, restitution=1)  # 1
+        # p.changeDynamics(self.table, 0, restitution=self.res0)  # 0.2
+        # p.changeDynamics(self.table, 1, restitution=self.res12)  # 1.1
+        # p.changeDynamics(self.table, 2, restitution=self.res12)  # 1.1
+        # p.changeDynamics(self.table, 4, restitution=self.res45)  # 1
+        # p.changeDynamics(self.table, 5, restitution=self.res45)  # 1
+        # p.changeDynamics(self.table, 6, restitution=self.res67)  # 0.8
+        # p.changeDynamics(self.table, 7, restitution=self.res67)  # 0.8
+        # p.changeDynamics(self.table, 0, lateralFriction=self.latf)  # 0.01
+        # p.changeDynamics(self.puck, 0, restitution=1)  # 1
+
+        p.changeDynamics(self.table, 0, restitution=self.res0)  # 0.2
+        p.changeDynamics(self.table, 1, restitution=self.res1)  # 1.1
+        p.changeDynamics(self.table, 2, restitution=self.res2)  # 1.1
+        # p.changeDynamics(self.table, 3, restitution=self.res3)  # 1
+        p.changeDynamics(self.table, 4, restitution=self.res4)  # 1
+        p.changeDynamics(self.table, 5, restitution=self.res5)  # 0.8
+        # p.changeDynamics(self.table, 6, restitution=self.res6)  # 0.8
+        p.changeDynamics(self.table, 7, restitution=self.res7)  # 0.8
+        p.changeDynamics(self.table, 8, restitution=self.res8)  # 0.8
+
+        p.changeDynamics(self.table, 0, lateralFriction=self.latf)  # 0.01
+        p.changeDynamics(self.puck, 0, restitution=1)  # 1
 
         puck_posori_6, puck_posori_2 = self.initdata(puck_poses)
         speed, t_series = self.Diff(puck_posori_2, 10, 0.4)
@@ -236,23 +260,23 @@ class Model:
         poses_ang = []
         simvel = []
         readidx = 0
-        # runbag(readidx, posestart)
+        self.runbag(readidx, posestart)
         p.setRealTimeSimulation(1)
         # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
-        p.resetBasePositionAndOrientation(puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-        p.resetBaseVelocity(puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
+        p.resetBasePositionAndOrientation(self.puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
+        p.resetBaseVelocity(self.puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
         while readidx < speed.shape[0]:
             # p.stepSimulation()
 
-            self.collision_filter(puck, table)
+            self.collision_filter(self.puck, self.table)
             if readidx == 0:
                 lastpuck = posestart[readidx, 0:3]
                 poses_pos.append(lastpuck)
                 poses_ang.append(posestart[readidx, 3:7])
                 readidx += 1
 
-            simvel.append(p.getBaseVelocity(puck)[0] + p.getBaseVelocity(puck)[1])
-            recordpos, recordang = p.getBasePositionAndOrientation(puck)
+            simvel.append(p.getBaseVelocity(self.puck)[0] + p.getBaseVelocity(self.puck)[1])
+            recordpos, recordang = p.getBasePositionAndOrientation(self.puck)
             poses_pos.append(recordpos)
             poses_ang.append(recordang)
 
@@ -267,8 +291,7 @@ class Model:
             poses_ang[i, :3] = p.getEulerFromQuaternion(poses_ang[i, :])
         poses_ang = poses_ang[:, :3]
 
-
-
+        # p.disconnect(self._client)
         return t_series, np.hstack((np.array(poses_pos), np.array(poses_ang))), puck_posori_6
 
 
@@ -278,8 +301,16 @@ class Model:
         Err_x = []
         Err_y = []
         Err = [Err_x, Err_y]
+
+        T = np.linspace(0,sim.shape[0], sim.shape[0])
+        reward = [np.exp(-0.005 * t) for t in T]
+
         for i, p in enumerate(pick):
-            Err[i].append( np.linalg.norm(sim[:,p]- bag[:,p]) )
+            Err[i].append(
+                (
+                np.sqrt(np.square(sim[:, p] - bag[:, p]) * reward)
+                ).sum()
+            )
 
 
         return Err
@@ -288,25 +319,49 @@ class Model:
 
 
 if __name__ == "__main__" :
-
-    x = [0.2, 1.1, 1, 0.8, 0.01]
+    # restitution and friction
+    #       t_down_rim_l (1),
+    #       t_down_rim_r (2),
+    #       t_left_rim (4),
+    #       t_right_rim (5),
+    #       t_up_rim_l (6),
+    #       t_up_rim_r (7)
+    #       res0
+    #       res12
+    #       res45
+    #       res67
+    #       latf
+    res0 = 0.2  # 0.2
+    res1 = 1  # 1
+    res2 = 1.55  # 1.55
+    res4 = 1  # 1
+    res5 = 1  # 1
+    res7 = 0.83  # 0.83
+    res8 = 1.2  # 1.2
+    latf = 0.9  # 0.9
+    x = [res0, res1, res2, res4, res5, res7, res8, latf]
     model = Model(x)
     pick = [0, 1]
     label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
     color = ('r', 'g', 'b', 'k', 'y', 'g')
 
+    # T = np.linspace(0,1342,1342)
+
+    # y = [np.exp(-0.005 *t) for t in T]
+    # plt.plot(T, y)
+    # plt.show()
     ############################################### get Err of two position #################################
-    Err = model.get_Err()
-    print('Err of two direction=', Err)
+    # Err = model.get_Err()
+    # print('Err of two direction=', Err)
 
 
     ############################################### plot only ##############################################
-    # t_series, sim, bag = model.get_sim()
-    # fig, axes = plt.subplots(len(pick), 1)
-    # for i,p in enumerate(pick):
-    #     axes[i].plot(t_series, sim[:, p], label=label[p], color=color[p])
-    #     axes[i].plot(t_series, bag[:, p], label=label[p], color=color[p], alpha=0.2)
-    # fig.legend()
-    # plt.show()
+    t_series, sim, bag = model.get_sim()
+    fig, axes = plt.subplots(len(pick), 1)
+    for i,p in enumerate(pick):
+        axes[i].plot(t_series, sim[:, p], label='sim'+'_'+label[p], color=color[p])
+        axes[i].plot(t_series, bag[:, p], label='data'+'_'+label[p], color=color[p], alpha=0.2)
+    fig.legend()
+    plt.show()
 
 

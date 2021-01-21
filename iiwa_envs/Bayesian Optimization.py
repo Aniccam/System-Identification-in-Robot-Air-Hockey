@@ -69,10 +69,10 @@ def plot(X, y, model):
 # init hyperparameter
 # res0, res12, res45, res67, latf
 # 0.2, 1.1, 1, 0.8, 0.01
-hyperparams = np.zeros((100,5))
+hyperparams = np.zeros((50,5))
 for i in range(hyperparams.shape[0]):
 	hyperparams[i, :4] = [np.random.uniform(0., 1.5) for i in range(4)]
-	hyperparams[i, 4] = np.random.uniform(0,1)
+	hyperparams[i, 4] = np.random.uniform(0, 1)
 
 y = asarray([objective(x) for x in hyperparams])
 # reshape into rows and cols
