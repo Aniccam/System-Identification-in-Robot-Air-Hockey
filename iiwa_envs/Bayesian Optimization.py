@@ -12,14 +12,15 @@ from warnings import catch_warnings
 from warnings import simplefilter
 from matplotlib import pyplot
 from get_sim_data import *
+from joblib import Parallel, delayed
 
 
 # objective function
 def objective(x):
 	model = Model(x)
-	Err = model.get_Err()
+	Err, _ = model.get_Err()
 	# return (x**2 * sin(5 * pi * x)**6.0) + noise
-	return np.sum(Err)
+	return Err
 
 # surrogate or approximation for the objective function
 def surrogate(model, X):
@@ -33,24 +34,25 @@ def surrogate(model, X):
 def acquisition(X, Xsamples, model):
 	# calculate the best surrogate score found so far
 	yhat, _ = surrogate(model, X)
-	best = max(yhat)
+	best = min(yhat)
 	# calculate mean and stdev via surrogate function
 	mu, std = surrogate(model, Xsamples)
 	mu = mu[:, 0]
 	# calculate the probability of improvement
-	probs = norm.cdf((mu - best) / (std+1E-9))
+	probs = norm.cdf((best - mu) / (std+1E-9))
 	return probs
 
 # optimize the acquisition function
+
 def opt_acquisition(X, y, model):
 	# random search, generate random samples
-	Xsamples = random(100)
-	Xsamples = Xsamples.reshape(len(Xsamples), 1)
+	Xsamples = get_hyp(50)
+	# Xsamples = Xsamples.reshape(len(Xsamples), 1)
 	# calculate the acquisition function for each sample
 	scores = acquisition(X, Xsamples, model)
 	# locate the index of the largest scores
-	ix = argmax(scores)
-	return Xsamples[ix, 0]
+	ix = np.argmax(scores)
+	return Xsamples[ix, :]
 
 # plot real observations vs surrogate function
 def plot(X, y, model):
@@ -69,38 +71,49 @@ def plot(X, y, model):
 # init hyperparameter
 # res0, res12, res45, res67, latf
 # 0.2, 1.1, 1, 0.8, 0.01
-hyperparams = np.zeros((50,5))
-for i in range(hyperparams.shape[0]):
-	hyperparams[i, :4] = [np.random.uniform(0., 1.5) for i in range(4)]
-	hyperparams[i, 4] = np.random.uniform(0, 1)
 
-y = asarray([objective(x) for x in hyperparams])
+def get_hyp(num):
+	hyperparams = np.zeros((num, 8))
+	for i in range(num):
+		hyperparams[i, 1:7] = [np.random.uniform(0., 1.5) for _ in range(6)]
+		hyperparams[i, 0] = np.random.uniform(0, 1)
+		hyperparams[i, 7] = np.random.uniform(0, 1)
+
+	return hyperparams
+X = get_hyp(2000)
+y = np.zeros((X.shape[0],1))
+for i in range(X.shape[0]):
+	y[i] = objective(X[i, :])
+	# print('obj', i, y[i])
+# y = Parallel()([objective(x) for x in X])
 # reshape into rows and cols
-X = X.reshape(len(X), 1)
-y = y.reshape(len(y), 1)
+# X = X.reshape(len(X), 1)
+# y = y.reshape(len(y), 1)
 # define the model
 model = GaussianProcessRegressor()
 # fit the model
 model.fit(X, y)
 # plot before hand
-plot(X, y, model)
+# plot(X, y, model)
 # perform the optimization process
-for i in range(100):
+for i in range(8000):
 	# select the next point to sample
 	x = opt_acquisition(X, y, model)
 	# sample the point
 	actual = objective(x)
+	# print('num', i,'chosen actual', actual)
 	# summarize the finding
-	est, _ = surrogate(model, [[x]])
-	print('>x=%.3f, f()=%3f, actual=%.3f' % (x, est, actual))
+	est, _ = surrogate(model, [x])
+	# print('>x=%.3f, f()=%3f, actual=%.3f' % (x, est, actual))
 	# add the data to the dataset
-	X = vstack((X, [[x]]))
-	y = vstack((y, [[actual]]))
+	X = vstack((X, [x]))
+	y = vstack((y, actual))
 	# update the model
 	model.fit(X, y)
 
 # plot all samples and the final surrogate function
-plot(X, y, model)
+# plot(X, y, model)
 # best result
-ix = argmax(y)
-print('Best Result: x=%.3f, y=%.3f' % (X[ix], y[ix]))
+ix = np.argmin(y)
+print('Best Result of X,y=: \n',  *np.array(X[ix]),sep=',')
+print(y[ix])

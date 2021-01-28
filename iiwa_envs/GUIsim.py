@@ -90,6 +90,8 @@ class Model:
         p.setCollisionFilterPair(puck, table, 0, 5, 1)
         p.setCollisionFilterPair(puck, table, 0, 6, 1)
         p.setCollisionFilterPair(puck, table, 0, 7, 1)
+        p.setCollisionFilterPair(puck, table, 0, 8, 1)
+
 
 # relations
 # slide: t_base (0)
@@ -158,22 +160,15 @@ class Model:
     def get_sim(self, connection_mode=None):
         bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
         puck_poses, _, _, self.t = self.read_bag(bag)
-        # if connection_mode is None:
-        #     self._client = p.connect(p.SHARED_MEMORY)
-        #     if self._client >= 0:
-        #         None
-        #     else:
-        #         connection_mode = p.DIRECT
-        # self._client = p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
-        p.connect(p.DIRECT)  # use build-in graphical user interface, p.DIRECT: pass the final results
+        p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setPhysicsEngineParameter(numSolverIterations=150)
         p.setGravity(0., 0., -9.81)
-        p.setTimeStep(1 / 120)
+        # p.setTimeStep(1 / 120)
 
-        ####################################################################################################################
-        # p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
-        #                              cameraTargetPosition=[1.55, 0.85, 1.])
+        ###################################################################################################################
+        p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
+                                     cameraTargetPosition=[1.55, 0.85, 1.])
 
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
         self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
@@ -225,8 +220,8 @@ class Model:
         poses_ang = []
         simvel = []
         readidx = 0
-        # self.runbag(readidx, posestart)
-        # p.setRealTimeSimulation(1)
+        self.runbag(readidx, posestart)
+        p.setRealTimeSimulation(1)
         # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
         p.resetBasePositionAndOrientation(self.puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
         p.resetBaseVelocity(self.puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
@@ -246,7 +241,7 @@ class Model:
             poses_ang.append(recordang)
 
             ####################################################################################################################
-            # p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
+            p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
 
             lastpuck = recordpos
             readidx += 1
@@ -317,7 +312,8 @@ if __name__ == "__main__" :
     res7 = 0.83  # 0.83
     res8 = 1.2  # 1.2
     latf = 0.9  # 0.9
-    x = [res0, res1, res2, res4, res5, res7, res8, latf]
+    # x = [res0, res1, res2, res4, res5, res7, res8, latf]
+    x = [0.22645593975122136,0.5606031953455242,1.4967504346705587,0.6229916732249503,0.6338971152212791,0.9946986501036293,0.6735213865724128,0.690692106808605]
     model = Model(x)
     pick = [0, 1]
     label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
