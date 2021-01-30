@@ -11,16 +11,17 @@ import matplotlib.pyplot as plt
 class Model:
     def __init__(self, hyperparams):
 
-        self.res0 = hyperparams[0]       # res0
+        self.res0 = 0.2       # res0
         self.res1 = hyperparams[1]     # res1
-        self.res2 = hyperparams[2]     # res2
+        self.res2 = hyperparams[1]     # res2
         # self.res3 = hyperparams[3]     # res3
-        self.res4 = hyperparams[3]     # res4
-        self.res5 = hyperparams[4]     # res5
+        self.res4 = hyperparams[1]     # res4
+        self.res5 = hyperparams[1]     # res5
         # self.res6 = hyperparams[6]     # res6
-        self.res7 = hyperparams[5]     # res7
-        self.res8 = hyperparams[6]     # res58
-        self.latf = hyperparams[7]       # latf
+        self.res7 = hyperparams[1]     # res7
+        self.res8 = hyperparams[1]     # res58
+        self.latf = hyperparams[0]       # latf
+        self.angvel = hyperparams[2]
         # self.id = id
     def read_bag(self, bag):
         mallet_poses = []
@@ -214,7 +215,7 @@ class Model:
                 break
 
         init_linvel = np.hstack((linvel * np.array(initori), 0))
-        init_angvel = np.hstack(([0, 0], angvel))
+        init_angvel = np.hstack(([0, 0], self.angvel))
 
         poses_pos = []
         poses_ang = []
@@ -313,7 +314,7 @@ if __name__ == "__main__" :
     res8 = 1.2  # 1.2
     latf = 0.9  # 0.9
     # x = [res0, res1, res2, res4, res5, res7, res8, latf]
-    x = [0.22645593975122136,0.5606031953455242,1.4967504346705587,0.6229916732249503,0.6338971152212791,0.9946986501036293,0.6735213865724128,0.690692106808605]
+    x = [0.4480177367958975,0.9990565497172149,17.82352318507435]
     model = Model(x)
     pick = [0, 1]
     label = ('x', 'y', 'z', 'wx', 'wy', 'wz')

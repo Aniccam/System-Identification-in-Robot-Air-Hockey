@@ -11,16 +11,17 @@ import matplotlib.pyplot as plt
 class Model:
     def __init__(self, hyperparams):
 
-        self.res0 = hyperparams[0]       # res0
+        self.res0 = 0.2       # res0
         self.res1 = hyperparams[1]     # res1
-        self.res2 = hyperparams[2]     # res2
+        self.res2 = hyperparams[1]     # res2
         # self.res3 = hyperparams[3]     # res3
-        self.res4 = hyperparams[3]     # res4
-        self.res5 = hyperparams[4]     # res5
+        self.res4 = hyperparams[1]     # res4
+        self.res5 = hyperparams[1]     # res5
         # self.res6 = hyperparams[6]     # res6
-        self.res7 = hyperparams[5]     # res7
-        self.res8 = hyperparams[6]     # res58
-        self.latf = hyperparams[7]       # latf
+        self.res7 = hyperparams[1]     # res7
+        self.res8 = hyperparams[1]     # res58
+        self.latf = hyperparams[0]       # latf
+        self.angvel = hyperparams[2]
         # self.id = id
     def read_bag(self, bag):
         mallet_poses = []
@@ -217,7 +218,7 @@ class Model:
                 linvel = speed[i, 0]
                 angvel = speed[i, 1]
                 break
-
+        angvel = self.angvel
         init_linvel = np.hstack((linvel * np.array(initori), 0))
         init_angvel = np.hstack(([0, 0], angvel))
 

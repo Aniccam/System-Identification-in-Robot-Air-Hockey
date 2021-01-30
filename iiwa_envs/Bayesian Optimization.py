@@ -46,7 +46,7 @@ def acquisition(X, Xsamples, model):
 
 def opt_acquisition(X, y, model):
 	# random search, generate random samples
-	Xsamples = get_hyp(50)
+	Xsamples = get_hyp(2000)
 	# Xsamples = Xsamples.reshape(len(Xsamples), 1)
 	# calculate the acquisition function for each sample
 	scores = acquisition(X, Xsamples, model)
@@ -73,18 +73,26 @@ def plot(X, y, model):
 # 0.2, 1.1, 1, 0.8, 0.01
 
 def get_hyp(num):
-	hyperparams = np.zeros((num, 8))
-	for i in range(num):
-		hyperparams[i, 1:7] = [np.random.uniform(0., 1.5) for _ in range(6)]
-		hyperparams[i, 0] = np.random.uniform(0, 1)
-		hyperparams[i, 7] = np.random.uniform(0, 1)
+	"""
 
+	:param num:
+	:return lateral friction, restitution, ori vel , :
+	"""
+	hyperparams = np.zeros((num, 3))
+	# for i in range(num):
+	# 	hyperparams[i, 1:7] = [np.random.uniform(0., 1.5) for _ in range(6)]
+	# 	hyperparams[i, 0] = np.random.uniform(0, 1)
+	# 	hyperparams[i, 7] = np.random.uniform(0, 1)
+	for i in range(num):
+		hyperparams[i, 0] = np.random.uniform(0,1)
+		hyperparams[i, 1] = np.random.uniform(0,1)
+		hyperparams[i, 2] = np.random.uniform(-30,30)
 	return hyperparams
-X = get_hyp(2000)
+X = get_hyp(300)
 y = np.zeros((X.shape[0],1))
 for i in range(X.shape[0]):
 	y[i] = objective(X[i, :])
-	# print('obj', i, y[i])
+	print('obj', i, y[i])
 # y = Parallel()([objective(x) for x in X])
 # reshape into rows and cols
 # X = X.reshape(len(X), 1)
@@ -96,12 +104,12 @@ model.fit(X, y)
 # plot before hand
 # plot(X, y, model)
 # perform the optimization process
-for i in range(8000):
+for i in range(2000):
 	# select the next point to sample
 	x = opt_acquisition(X, y, model)
 	# sample the point
 	actual = objective(x)
-	# print('num', i,'chosen actual', actual)
+	print('num', i,'chosen actual', actual)
 	# summarize the finding
 	est, _ = surrogate(model, [x])
 	# print('>x=%.3f, f()=%3f, actual=%.3f' % (x, est, actual))
