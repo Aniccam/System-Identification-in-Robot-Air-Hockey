@@ -91,20 +91,7 @@ class Model:
         p.setCollisionFilterPair(puck, table, 0, 5, 1)
         p.setCollisionFilterPair(puck, table, 0, 6, 1)
         p.setCollisionFilterPair(puck, table, 0, 7, 1)
-
-# relations
-# slide: t_base (0)
-# restitution and friction
-#       t_base (0)
-#       t_down_rim_l (1),
-#       t_down_rim_r (2),
-#       t_t_down_rim_top(3),
-#       t_left_rim (4),
-#       t_right_rim (5),
-#       t_up_rim_l (6),
-#       t_up_rim_r (7),
-#       t_up_rim_top (8)
-#       instead t with base
+        p.setCollisionFilterPair(puck, table, 0, 8, 1)
 
     def filter(self, data, Wn=0.1):
         b, a = signal.butter(3, Wn)  # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
@@ -115,12 +102,6 @@ class Model:
 
     def Diff(self, data, h, Wn=0.3):
         slope = np.zeros((data.shape))
-        # data_ = np.zeros((data.shape[0], 2))
-
-    #   data changed after using, so .copy is necessary
-    #   tradeoff: large Wn, good coincidence with original traj, position noised. small Wn, bad coincidence with ori. traj at corner, position less noised
-    #   in order to get initial velocity, here ignore the corer precision with small Wn
-    #     data = filter(data.copy(), 0.7)
         t_stueck = self.t / data.shape[0]
         for i in range(data.shape[0]):  # Differenzenquotienten
             if i > data.shape[0] - h - 1:
@@ -133,7 +114,6 @@ class Model:
 
     def initdata(self, posedata):
         posestart = posedata[354:, :]
-        # posestart = posedata
         posestart[:, 2] = 0.1172 * np.ones(posestart.shape[0])
         for i in range(posestart.shape[0]):
             posestart[i,3:6] = p.getEulerFromQuaternion(posestart[i,3:7])
@@ -159,52 +139,34 @@ class Model:
             lastpuck = posestart[readidx, 0:3]
             readidx += 1
 
-    def get_sim(self):
+    def get_sim(self, mode='GUI'):
         bag = rosbag.Bag('./rosbag_data/2020-12-04-12-41-02.bag')
         puck_poses, _, _, self.t = self.read_bag(bag)
-        # if connection_mode is None:
-        #     self._client = p.connect(p.SHARED_MEMORY)
-        #     if self._client >= 0:
-        #         None
-        #     else:
-        #         connection_mode = p.DIRECT
-        # self._client = p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
-        p.connect(p.DIRECT)  # use build-in graphical user interface, p.DIRECT: pass the final results
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        if mode == "GUI":
+            p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
+            p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
+                                         cameraTargetPosition=[1.55, 0.85, 1.])
+        elif mode == 'DIRECT':
+            p.connect(p.DIRECT)
+        else:
+            print('Input wrong simulation mode ')
+        p.resetSimulation()
         p.setPhysicsEngineParameter(numSolverIterations=150)
         p.setGravity(0., 0., -9.81)
-        # p.setTimeStep(1 / 120)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-        ####################################################################################################################
-        # p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
-        #                              cameraTargetPosition=[1.55, 0.85, 1.])
 
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
         self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
+        # self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
         self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
 
-        # init plot
-        pick = [0, 1, 5]
-        label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
-        color = ('r', 'g', 'b', 'k', 'y', 'g')
-        # fig, axes = plt.subplots(len(pick), 1)
-        # fig1, axes1 = plt.subplots(len(pick), 1)
 
-
-
-        p.changeDynamics(self.table, 0, restitution=self.res0)  # 0.2
-        p.changeDynamics(self.table, 1, restitution=self.res1)  # 1.1
-        p.changeDynamics(self.table, 2, restitution=self.res2)  # 1.1
-        # p.changeDynamics(self.table, 3, restitution=self.res3)  # 1
-        p.changeDynamics(self.table, 4, restitution=self.res4)  # 1
-        p.changeDynamics(self.table, 5, restitution=self.res5)  # 0.8
-        # p.changeDynamics(self.table, 6, restitution=self.res6)  # 0.8
-        p.changeDynamics(self.table, 7, restitution=self.res7)  # 0.8
-        p.changeDynamics(self.table, 8, restitution=self.res8)  # 0.8
-
-        p.changeDynamics(self.table, 0, lateralFriction=self.latf)  # 0.01
-        p.changeDynamics(self.puck, 0, restitution=1)  # 1
+        j_puck = self.get_joint_map(self.puck)
+        j_table = self.get_joint_map(self.table)
+        p.changeDynamics(self.table, j_table.get(b'base_joint'), lateralFriction=11)
+        p.changeDynamics(self.puck, -1, lateralFriction= 12)
 
         puck_posori_6, puck_posori_2 = self.initdata(puck_poses)
         speed, t_series = self.Diff(puck_posori_2, 10, 0.4)
@@ -221,23 +183,26 @@ class Model:
                 linvel = speed[i, 0]
                 angvel = speed[i, 1]
                 break
-        angvel = self.angvel
+
         init_linvel = np.hstack((linvel * np.array(initori), 0))
-        init_angvel = np.hstack(([0, 0], angvel))
+        init_angvel = np.hstack(([0, 0], 0))
 
         poses_pos = []
         poses_ang = []
         simvel = []
         readidx = 0
+
+ ###################### run bag ########################################
         # self.runbag(readidx, posestart)
+
         # p.setRealTimeSimulation(1)
         # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
         p.resetBasePositionAndOrientation(self.puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-        p.resetBaseVelocity(self.puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
+        p.resetBaseVelocity(self.puck, linearVelocity=init_linvel) #, angularVelocity=init_angvel)
+        p.setTimeStep(1 / 120)
         while readidx < speed.shape[0]:
             p.stepSimulation()
-            p.setTimeStep(1 / 120)
-
+            # time.sleep(1/120.)
             self.collision_filter(self.puck, self.table)
             if readidx == 0:
                 lastpuck = posestart[readidx, 0:3]
@@ -250,41 +215,40 @@ class Model:
             poses_pos.append(recordpos)
             poses_ang.append(recordang)
 
-            ####################################################################################################################
-            # p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
+            if mode == 'GUI':
+                p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
 
             lastpuck = recordpos
             readidx += 1
 
-        # Nachbearbeitung
         poses_ang = np.array(poses_ang)
         for i in range(poses_ang.shape[0]):
             poses_ang[i, :3] = p.getEulerFromQuaternion(poses_ang[i, :])
         poses_ang = poses_ang[:, :3]
 
-        p.resetSimulation()
         p.disconnect()
-
         return t_series, np.hstack((np.array(poses_pos), np.array(poses_ang))), puck_posori_6
 
+    def get_joint_map(self, bodyUniqueId):
+
+        """
+
+        :param bodyUniqueId:
+
+        :return: dict, val
+        """
+        idx_num = p.getNumJoints(bodyUniqueId)
+        joint_dict = {}
+        for i in range(idx_num):
+            jointName = p.getJointInfo(bodyUniqueId, i)[1]  # 2nd idx of return is jointName
+            joint_dict.update({jointName : i})
+
+        return joint_dict
 
     def get_Err(self):
-        pick = [0, 1]
         t_series, sim, bag = self.get_sim()
-        # Err_x = []
-        # Err_y = []
-        # Err = [Err_x, Err_y]
         Err = []
-
         T = np.linspace(0,sim.shape[0], sim.shape[0])
-        reward = [np.exp(-0.005 * t) for t in T]
-
-        # for i, p in enumerate(pick):
-        #     Err[i].append(
-        #         (
-        #         np.sqrt(np.square(sim[:, p] - bag[:, p]) * reward)
-        #         ).sum()
-        #     )
         h = 10
         idxs = []
         idx = 0
@@ -304,18 +268,7 @@ class Model:
 
 
 if __name__ == "__main__" :
-    # restitution and friction
-    #       t_down_rim_l (1),
-    #       t_down_rim_r (2),
-    #       t_left_rim (4),
-    #       t_right_rim (5),
-    #       t_up_rim_l (6),
-    #       t_up_rim_r (7)
-    #       res0
-    #       res12
-    #       res45
-    #       res67
-    #       latf
+
     res0 = 0.2  # 0.2
     res1 = 1  # 1
     res2 = 1.55  # 1.55
@@ -324,7 +277,8 @@ if __name__ == "__main__" :
     res7 = 0.83  # 0.83
     res8 = 1.16  # 1.2
     latf = 0.9  # 0.9
-    x = [res0, res1, res2, res4, res5, res7, res8, latf]
+    # x = [res0, res1, res2, res4, res5, res7, res8, latf]
+    x = [0.6381786885142524,0.9914549727439932,14.131639297171652]
     model = Model(x)
     pick = [0, 1]
     label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
@@ -341,12 +295,12 @@ if __name__ == "__main__" :
 
 
     ############################################### plot only ##############################################
-    t_series, sim, bag = model.get_sim()
-    fig, axes = plt.subplots(len(pick), 1)
-    for i,p in enumerate(pick):
-        axes[i].plot(t_series, sim[:, p], label='sim'+'_'+label[p], color=color[p])
-        axes[i].plot(t_series, bag[:, p], label='data'+'_'+label[p], color=color[p], alpha=0.2)
-    fig.legend()
-    plt.show()
+    # t_series, sim, bag = model.get_sim()
+    # fig, axes = plt.subplots(len(pick), 1)
+    # for i,p in enumerate(pick):
+    #     axes[i].plot(t_series, sim[:, p], label='sim'+'_'+label[p], color=color[p])
+    #     axes[i].plot(t_series, bag[:, p], label='data'+'_'+label[p], color=color[p], alpha=0.2)
+    # fig.legend()
+    # plt.show()
 
 
