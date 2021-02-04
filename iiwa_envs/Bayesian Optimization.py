@@ -46,7 +46,7 @@ def acquisition(X, Xsamples, model):
 
 def opt_acquisition(X, y, model):
 	# random search, generate random samples
-	Xsamples = get_hyp(2000)
+	Xsamples = get_hyp(10000)
 	# Xsamples = Xsamples.reshape(len(Xsamples), 1)
 	# calculate the acquisition function for each sample
 	scores = acquisition(X, Xsamples, model)
@@ -84,11 +84,17 @@ def get_hyp(num):
 	# 	hyperparams[i, 0] = np.random.uniform(0, 1)
 	# 	hyperparams[i, 7] = np.random.uniform(0, 1)
 	for i in range(num):
-		hyperparams[i, 0] = np.random.uniform(0,1)
-		hyperparams[i, 1] = np.random.uniform(0,1)
+		hyperparams[i, 0] = np.random.uniform(0.3,1)
+		hyperparams[i, 1] = np.random.uniform(0.3,1)
 		hyperparams[i, 2] = np.random.uniform(-30,30)
 	return hyperparams
-X = get_hyp(300)
+
+ls = []
+testls = np.ones((32,64))
+
+
+
+X = get_hyp(50)
 y = np.zeros((X.shape[0],1))
 for i in range(X.shape[0]):
 	y[i] = objective(X[i, :])
@@ -101,10 +107,14 @@ for i in range(X.shape[0]):
 model = GaussianProcessRegressor()
 # fit the model
 model.fit(X, y)
-# plot before hand
-# plot(X, y, model)
+
 # perform the optimization process
-for i in range(2000):
+Lossmean = []
+Lossstd = []
+Lossmean.append(np.mean(y))
+Lossstd.append(np.std(y))
+iters = 3500
+for i in range(int(iters)):
 	# select the next point to sample
 	x = opt_acquisition(X, y, model)
 	# sample the point
@@ -116,12 +126,50 @@ for i in range(2000):
 	# add the data to the dataset
 	X = vstack((X, [x]))
 	y = vstack((y, actual))
+	Lossmean.append(np.mean(y))
+	Lossstd.append(np.std(y))
 	# update the model
 	model.fit(X, y)
 
+plt.plot(np.linspace(0,iters,iters+1), Lossmean, )
+plt.fill_between(np.linspace(0,iters,iters+1), np.array(Lossmean)-2* np.array(Lossstd), np.array(Lossmean)+2* np.array(Lossstd), alpha=0.3)
 # plot all samples and the final surrogate function
 # plot(X, y, model)
 # best result
 ix = np.argmin(y)
+
+f = open('testls_iter3500_fit50_acq10000.txt', 'w')
+#
+f.write('*' * 50)
+f.write('parameters')
+f.write('*' * 50)
+f.write('\n')
+for x in X:
+	f.write(str(x))
+	f.write('\n')
+f.write('*' * 50)
+f.write('Loss')
+f.write('*' * 50)
+f.write('\n')
+for loss in y:
+	f.write(str(loss))
+	f.write('\n')
+f.write('*' * 50)
+f.write('Loss_mean')
+f.write('*' * 50)
+f.write('\n')
+for loss_mean in Lossmean:
+	f.write(str(loss_mean))
+	f.write('\n')
+f.write('*' * 50)
+f.write('Loss_std')
+f.write('*' * 50)
+f.write('\n')
+for loss_std in Lossstd:
+	f.write(str(loss_std))
+	f.write('\n')
+f.close()
+
 print('Best Result of X,y=: \n',  *np.array(X[ix]),sep=',')
 print(y[ix])
+plt.show()

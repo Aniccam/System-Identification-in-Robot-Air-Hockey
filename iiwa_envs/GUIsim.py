@@ -165,7 +165,6 @@ class Model:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setPhysicsEngineParameter(numSolverIterations=150)
         p.setGravity(0., 0., -9.81)
-        # p.setTimeStep(1 / 120)
 
         ###################################################################################################################
         p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
@@ -174,26 +173,19 @@ class Model:
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
         self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
-        self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0])
+        self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
 
-        # init plot
-        pick = [0, 1, 5]
-        label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
-        color = ('r', 'g', 'b', 'k', 'y', 'g')
-        # fig, axes = plt.subplots(len(pick), 1)
-        # fig1, axes1 = plt.subplots(len(pick), 1)
-
-
-
-        p.changeDynamics(self.table, 0, restitution=self.res0)  # 0.2
-        p.changeDynamics(self.table, 1, restitution=self.res1)  # 1.1
-        p.changeDynamics(self.table, 2, restitution=self.res2)  # 1.1
+        p.changeDynamics(self.puck, 0, spinningFriction= 0.1)
+        p.changeDynamics(self.table, 0, spinningFriction= 0.1)
+        # p.changeDynamics(self.table, 0, restitution=self.res0)  # 0.2
+        # p.changeDynamics(self.table, 1, restitution=self.res1)  # 1.1
+        # p.changeDynamics(self.table, 2, restitution=self.res2)  # 1.1
         # p.changeDynamics(self.table, 3, restitution=self.res3)  # 1
-        p.changeDynamics(self.table, 4, restitution=self.res4)  # 1
-        p.changeDynamics(self.table, 5, restitution=self.res5)  # 0.8
+        # p.changeDynamics(self.table, 4, restitution=self.res4)  # 1
+        # p.changeDynamics(self.table, 5, restitution=self.res5)  # 0.8
         # p.changeDynamics(self.table, 6, restitution=self.res6)  # 0.8
-        p.changeDynamics(self.table, 7, restitution=self.res7)  # 0.8
-        p.changeDynamics(self.table, 8, restitution=self.res8)  # 0.8
+        # p.changeDynamics(self.table, 7, restitution=self.res7)  # 0.8
+        # p.changeDynamics(self.table, 8, restitution=self.res8)  # 0.8
 
         p.changeDynamics(self.table, 0, lateralFriction=self.latf)  # 0.01
         p.changeDynamics(self.puck, 0, restitution=1)  # 1
@@ -215,37 +207,38 @@ class Model:
                 break
 
         init_linvel = np.hstack((linvel * np.array(initori), 0))
-        init_angvel = np.hstack(([0, 0], self.angvel))
+        init_angvel = np.hstack(([0, 0], 0))
 
         poses_pos = []
         poses_ang = []
         simvel = []
         readidx = 0
-        self.runbag(readidx, posestart)
-        p.setRealTimeSimulation(1)
+        # self.runbag(readidx, posestart)
+        # p.setRealTimeSimulation(1)
         # p.setPhysicsEngineParameter(fixedTimeStep=t_series[-1]/len(t_series))
         p.resetBasePositionAndOrientation(self.puck, posestart[readidx, 0:3], posestart[readidx, 3:7])
-        p.resetBaseVelocity(self.puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
+        p.resetBaseVelocity(self.puck, linearVelocity=init_linvel) #, angularVelocity=init_angvel)
+        p.setTimeStep(1 / 120)
         while readidx < speed.shape[0]:
             p.stepSimulation()
-
-            self.collision_filter(self.puck, self.table)
-            if readidx == 0:
-                lastpuck = posestart[readidx, 0:3]
-                poses_pos.append(lastpuck)
-                poses_ang.append(posestart[readidx, 3:7])
-                readidx += 1
-
-            simvel.append(p.getBaseVelocity(self.puck)[0] + p.getBaseVelocity(self.puck)[1])
-            recordpos, recordang = p.getBasePositionAndOrientation(self.puck)
-            poses_pos.append(recordpos)
-            poses_ang.append(recordang)
-
-            ####################################################################################################################
-            p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
-
-            lastpuck = recordpos
-            readidx += 1
+            time.sleep(1/120.)
+            # self.collision_filter(self.puck, self.table)
+            # if readidx == 0:
+            #     lastpuck = posestart[readidx, 0:3]
+            #     poses_pos.append(lastpuck)
+            #     poses_ang.append(posestart[readidx, 3:7])
+            #     readidx += 1
+            #
+            # simvel.append(p.getBaseVelocity(self.puck)[0] + p.getBaseVelocity(self.puck)[1])
+            # recordpos, recordang = p.getBasePositionAndOrientation(self.puck)
+            # poses_pos.append(recordpos)
+            # poses_ang.append(recordang)
+            #
+            # ####################################################################################################################
+            # p.addUserDebugLine(lastpuck, recordpos, lineColorRGB=[0.1, 0.1, 0.5], lineWidth=5)
+            #
+            # lastpuck = recordpos
+            # readidx += 1
 
         # Nachbearbeitung
         poses_ang = np.array(poses_ang)
@@ -253,7 +246,8 @@ class Model:
             poses_ang[i, :3] = p.getEulerFromQuaternion(poses_ang[i, :])
         poses_ang = poses_ang[:, :3]
 
-        p.disconnect()
+        # p.disconnect()
+        p.resetSimulation()
         return t_series, np.hstack((np.array(poses_pos), np.array(poses_ang))), puck_posori_6
 
 
@@ -267,13 +261,6 @@ class Model:
 
         T = np.linspace(0,sim.shape[0], sim.shape[0])
         reward = [np.exp(-0.005 * t) for t in T]
-
-        # for i, p in enumerate(pick):
-        #     Err[i].append(
-        #         (
-        #         np.sqrt(np.square(sim[:, p] - bag[:, p]) * reward)
-        #         ).sum()
-        #     )
         h = 10
         idxs = []
         idx = 0
@@ -308,13 +295,13 @@ if __name__ == "__main__" :
     res0 = 0.2  # 0.2
     res1 = 1  # 1
     res2 = 1.55  # 1.55
-    res4 = 1  # 1
+    res4 = 1.2  # 1
     res5 = 1  # 1
     res7 = 0.83  # 0.83
-    res8 = 1.2  # 1.2
+    res8 = 1.16  # 1.2
     latf = 0.9  # 0.9
     # x = [res0, res1, res2, res4, res5, res7, res8, latf]
-    x = [0.4480177367958975,0.9990565497172149,17.82352318507435]
+    x = [0.6381786885142524,0.9914549727439932,14.131639297171652]
     model = Model(x)
     pick = [0, 1]
     label = ('x', 'y', 'z', 'wx', 'wy', 'wz')
@@ -331,12 +318,12 @@ if __name__ == "__main__" :
 
 
     ############################################### plot only ##############################################
-    t_series, sim, bag = model.get_sim()
-    fig, axes = plt.subplots(len(pick), 1)
-    for i,p in enumerate(pick):
-        axes[i].plot(t_series, sim[:, p], label='sim'+'_'+label[p], color=color[p])
-        axes[i].plot(t_series, bag[:, p], label='data'+'_'+label[p], color=color[p], alpha=0.2)
-    fig.legend()
-    plt.show()
+    # t_series, sim, bag = model.get_sim()
+    # fig, axes = plt.subplots(len(pick), 1)
+    # for i,p in enumerate(pick):
+    #     axes[i].plot(t_series, sim[:, p], label='sim'+'_'+label[p], color=color[p])
+    #     axes[i].plot(t_series, bag[:, p], label='data'+'_'+label[p], color=color[p], alpha=0.2)
+    # fig.legend()
+    # plt.show()
 
 

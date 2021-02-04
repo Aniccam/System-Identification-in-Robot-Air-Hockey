@@ -170,7 +170,7 @@ class Model:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setPhysicsEngineParameter(numSolverIterations=150)
         p.setGravity(0., 0., -9.81)
-        p.setTimeStep(1 / 120)
+        # p.setTimeStep(1 / 120)
 
         ####################################################################################################################
         # p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89,
@@ -233,6 +233,7 @@ class Model:
         p.resetBaseVelocity(self.puck, linearVelocity=init_linvel, angularVelocity=init_angvel)
         while readidx < speed.shape[0]:
             p.stepSimulation()
+            p.setTimeStep(1 / 120)
 
             self.collision_filter(self.puck, self.table)
             if readidx == 0:
@@ -258,7 +259,9 @@ class Model:
             poses_ang[i, :3] = p.getEulerFromQuaternion(poses_ang[i, :])
         poses_ang = poses_ang[:, :3]
 
+        p.resetSimulation()
         p.disconnect()
+
         return t_series, np.hstack((np.array(poses_pos), np.array(poses_ang))), puck_posori_6
 
 
@@ -313,10 +316,10 @@ if __name__ == "__main__" :
     res0 = 0.2  # 0.2
     res1 = 1  # 1
     res2 = 1.55  # 1.55
-    res4 = 1  # 1
+    res4 = 1.2  # 1
     res5 = 1  # 1
     res7 = 0.83  # 0.83
-    res8 = 1.2  # 1.2
+    res8 = 1.16  # 1.2
     latf = 0.9  # 0.9
     x = [res0, res1, res2, res4, res5, res7, res8, latf]
     model = Model(x)
