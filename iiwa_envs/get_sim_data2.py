@@ -165,8 +165,18 @@ class Model:
 
         j_puck = self.get_joint_map(self.puck)
         j_table = self.get_joint_map(self.table)
-        p.changeDynamics(self.table, j_table.get(b'base_joint'), lateralFriction=11)
-        p.changeDynamics(self.puck, -1, lateralFriction= 12)
+        tablef = 1
+        p.changeDynamics(self.table, j_table.get(b'base_joint'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_l'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_r'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_top'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_left_rim'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_right_rim'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), lateralFriction=tablef)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_top'), lateralFriction=tablef)
+
+        p.changeDynamics(self.puck, -1, lateralFriction= 0.1)
 
         puck_posori_6, puck_posori_2 = self.initdata(puck_poses)
         speed, t_series = self.Diff(puck_posori_2, 10, 0.4)
@@ -202,7 +212,7 @@ class Model:
         p.setTimeStep(1 / 120)
         while readidx < speed.shape[0]:
             p.stepSimulation()
-            # time.sleep(1/120.)
+            time.sleep(1/120.)
             self.collision_filter(self.puck, self.table)
             if readidx == 0:
                 lastpuck = posestart[readidx, 0:3]
