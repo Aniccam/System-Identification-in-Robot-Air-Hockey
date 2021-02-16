@@ -2,23 +2,36 @@ import os
 from robots import __file__ as path_robots
 import numpy as np
 import time
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import rosbag
 from create_segment import *
 from scipy import signal
 import pybullet as p
 import pybullet_data
-
-
+import math
 class Model:
     def __init__(self, parameters, init_pos, init_vel):
-        self.t_lateral_f = parameters[0] # friction
-        self.left_rim = parameters[1]   # resititution
-        self.right_rim = parameters[1]  # restitution
-        self.four_side_rim = parameters[2] # restitution
+        """
+
+        :param parameters: [t_lateral_f, left_right_rim_res, left_rim_f, four_side_rim_res, four_side_rim_latf, angvel]  [5,]
+        :param init_pos:
+        :param init_vel:
+        """
+        self.t_lateral_f = parameters[0]  # friction
+        self.left_rim_res = parameters[1]  #  resititution
+        self.right_rim_res = parameters[1]   # restitution
+        self.left_rim_f = parameters[2]  # friction
+
+        self.four_side_rim_res = parameters[3]  # restitution
+        self.four_side_rim_latf = parameters[4]  # friction
+        # self.angvel = parameters[5]
+
+
+
         self.init_pos = init_pos
         self.lin_vel = init_vel[:3]
         self.ang_vel = init_vel[3:]
+        # self.ang_vel[2] = self.angvel     ############# if tune angular velocity
     def get_joint_map(self, bodyUniqueId):
 
         """
@@ -49,6 +62,7 @@ class Model:
     def sim_bullet(self, mode='GUI'):
 
         if mode == "GUI":
+            self.mode = "GUI"
             p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
             p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
         elif mode == "DIRECT":
@@ -63,55 +77,51 @@ class Model:
 
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
         self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
+        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
         # self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
-        self.puck = p.loadURDF(file, self.init_pos, [0, 0, 0.0, 1.0])
+        self.puck = p.loadURDF(file, self.init_pos, [0, 0, 0.0, 1.0],flags=p.URDF_USE_INERTIA_FROM_FILE or p.URDF_MERGE_FIXED_LINKS)
         j_puck = self.get_joint_map(self.puck)
         j_table = self.get_joint_map(self.table)
-        p.changeDynamics(self.puck, -1, mass=0.013)
         p.changeDynamics(self.puck, -1, lateralFriction=1)
+        p.changeDynamics(self.puck, -1, restitution=1)
         # p.changeDynamics(self.puck, -1, restitution=0.8)
 
-
-
         # load parameters
-        p.changeDynamics(self.puck, -1, restitution=0.67)
 
         p.changeDynamics(self.table, j_table.get(b'base_joint'), lateralFriction=self.t_lateral_f)
-        p.changeDynamics(self.table, j_table.get(b'base_down_rim_l'), lateralFriction=1)
-        p.changeDynamics(self.table, j_table.get(b'base_down_rim_r'), lateralFriction=1)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_l'), lateralFriction=self.four_side_rim_latf)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_r'), lateralFriction=self.four_side_rim_latf)
         p.changeDynamics(self.table, j_table.get(b'base_down_rim_top'), lateralFriction=1)  # no collision
-        p.changeDynamics(self.table, j_table.get(b'base_left_rim'), lateralFriction=0.5)
-        p.changeDynamics(self.table, j_table.get(b'base_right_rim'), lateralFriction=1)
-        p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), lateralFriction=1)
-        p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), lateralFriction=1)
+        p.changeDynamics(self.table, j_table.get(b'base_left_rim'), lateralFriction=self.left_rim_f)
+        p.changeDynamics(self.table, j_table.get(b'base_right_rim'), lateralFriction=self.left_rim_f)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), lateralFriction=self.four_side_rim_latf)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), lateralFriction=self.four_side_rim_latf)
         p.changeDynamics(self.table, j_table.get(b'base_up_rim_top'), lateralFriction=1)  # no collision
 
 
-        p.changeDynamics(self.table, j_table.get(b'base_joint'), restitution=1)
-        p.changeDynamics(self.table, j_table.get(b'base_down_rim_l'), restitution=self.four_side_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_down_rim_r'), restitution=self.four_side_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_down_rim_top'), restitution=self.four_side_rim) # no collision
-        p.changeDynamics(self.table, j_table.get(b'base_left_rim'), restitution=self.left_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_right_rim'), restitution=self.right_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), restitution=self.four_side_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), restitution=self.four_side_rim)
-        p.changeDynamics(self.table, j_table.get(b'base_up_rim_top'), restitution=self.four_side_rim) # no collision
+        p.changeDynamics(self.table, j_table.get(b'base_joint'), restitution=0.2)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_l'), restitution=self.four_side_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_r'), restitution=self.four_side_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_down_rim_top'), restitution=self.four_side_rim_res) # no collision
+        p.changeDynamics(self.table, j_table.get(b'base_left_rim'), restitution=self.left_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_right_rim'), restitution=self.right_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), restitution=self.four_side_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), restitution=self.four_side_rim_res)
+        p.changeDynamics(self.table, j_table.get(b'base_up_rim_top'), restitution=self.four_side_rim_res) # no collision
 
         # init puck
 
         self.collision_filter(self.puck, self.table)
         p.resetBasePositionAndOrientation(self.puck, self.init_pos, [0, 0, 0, 1.] )
         p.resetBaseVelocity(self.puck, linearVelocity=self.lin_vel, angularVelocity=self.ang_vel)
-        p.setTimeStep(1 / 120.)
         # START
         pre_pos = self.init_pos
         pos = [pre_pos]  # record position
         vel = [self.lin_vel]  # record velocity
         t_sim = [0]  # record time
         t = 0
-
-        while (np.array(p.getBaseVelocity(self.puck)) > .001).any():
+        p.setTimeStep(1 / 120.)
+        while (np.abs(np.array(p.getBaseVelocity(self.puck))) > .01).any() and np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) <0.3:
         # while True:
             p.stepSimulation()
             time.sleep(1/120.)
@@ -126,7 +136,7 @@ class Model:
         return np.array(t_sim)[:, None], np.array(pos), np.array(vel)
 
 
-def get_lin_vel(bagdata):
+def get_vel(bagdata):
 
         def filter(data, Wn=0.1):
             b, a = signal.butter(3, Wn)  # Wn is the frequency when amplitude drop of 3 dB, smaller Wn, smaller frequency pass
@@ -150,35 +160,35 @@ def get_lin_vel(bagdata):
         slope = Diff(t_stueck, data, 10, Wn=0.4)
         return slope
 
-def vel2initvel(linvel,bagdata):
+def vel2initvel(vel,bagdata):
     tan_theta = (bagdata[20, 1:3] - bagdata[0, 1:3])[1] / (bagdata[20, 1:3] - bagdata[0, 1:3])[0]
     cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
     sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1)
     initori = np.array([cos_theta, sin_theta])
 
     # get whole speed
-    begin_slice = linvel[:15, :]
-    init_speed = np.linalg.norm(np.max(np.abs(begin_slice), axis=0)[:2])   # root(x**2 + y** 2)
+    begin_slice = vel[:10, :]
+    lin_init_speed = np.linalg.norm(np.max(np.abs(begin_slice), axis=0)[:2])   # root(x**2 + y** 2)
+    ang_init_vel = np.max(np.abs(vel[:10, 3:]), axis=0)
+    return lin_init_speed * initori, ang_init_vel
 
-    return init_speed * initori
+def get_Err(bagdata, simdata):
 
-def get_Err(t_sim, sim_pos, bagdata):
-        sim_pos = sim_pos
         Err = []
         h = 10
         idxs = []
         idx = 0
-        for i, p in enumerate(bagdata[:, 1:-1]):
-            if i+h > sim_pos.shape[0] or idx+h > sim_pos.shape[0]:
+        for i, p in enumerate(bagdata[:, 1:3]):
+            if i+h > simdata.shape[0] or idx+h > simdata.shape[0]:
                 break
             errs = np.linalg.norm(
-                    (bag[i, :2]* np.ones((h, 2)) - sim_pos[idx:idx+h, :2]), axis=1
+                    (bagdata[i, 1:3]* np.ones((h, 2)) - simdata[idx:idx+h, 1:-1]), axis=1
                 )
-            err = np.min(errs) * np.exp(-0.005 * t_sim[i])
+            err = np.min(errs) * np.exp(-0.005 * simdata[i, 0])
             Err.append(err)
             idx = np.argmin(errs, axis=0) + i
             idxs.append(idx)
-        return np.sum(Err), Err
+        return np.sum(Err)
 
 def runbag(bagdata):
         p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
@@ -192,17 +202,76 @@ def runbag(bagdata):
 
         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
         table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model.urdf")
+        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
         readidx = 0
-        lastpuck = np.hstack((bagdata[readidx, 1:3], 0.117))
+        lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
         puck = p.loadURDF(file, lastpuck, [0, 0, 0.0, 1.0])
         while readidx < bagdata.shape[0]-1:
-            p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.117)), [0, 0, 0, 1.])
-            p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.117)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
-            lastpuck = np.hstack((bagdata[readidx, 1:3], 0.117))
+            p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), [0, 0, 0, 1.])
+            p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+            lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
             readidx += 1
         p.disconnect()
+
+def Lossfun(bagdata, simdata, mode='GUI'):
+    t_stamp_bag = get_collide_stamp(bagdata)
+    t_stamp_sim = get_collide_stamp(simdata)
+    collide_num = np.min([len(t_stamp_sim), len(t_stamp_bag)])
+    # if len(t_stamp_sim)<2 :
+    #     return 100
+    # else:
+    #     front_idx = t_stamp_bag[1]  # time earlier point
+    #     back_idx = t_stamp_bag[1] - 25
+    #     ang_res_bag = np.arctan( (bagdata[front_idx, 1] - bagdata[back_idx, 1]) / (
+    #                 bagdata[front_idx, 2] - bagdata[back_idx, 2]) )
+    #
+    #     front_idx = t_stamp_sim[1]  # time earlier point
+    #     back_idx = t_stamp_sim[1] - 25
+    #     ang_res_sim = np.arctan( (simdata[front_idx, 1] - simdata[back_idx, 1]) / (
+    #                 simdata[front_idx, 2] - simdata[back_idx, 2]) )
+    #
+    #     err = np.linalg.norm(ang_res_bag - ang_res_sim) * 180 /math.pi
+    if mode == 'GUI':
+        plotdata(simdata, 'sim', markers=t_stamp_sim)
+        plotdata(bagdata, 'bag', markers=t_stamp_bag)
+    else:
+        pass
+    Loss = 0
+    ERR = 0
+    ang_errs = []
+    l_errs = []
+    for i in range(collide_num-1):
+
+        front_idx_bag = t_stamp_bag[i+1]  # time earlier point
+        back_idx_bag = t_stamp_bag[i+1] - 15
+        front_idx_sim = t_stamp_sim[i+1]  # time earlier point
+        back_idx_sim = t_stamp_sim[i+1] - 15
+        ang_list = np.arctan2([
+            bagdata[front_idx_bag, 2]-bagdata[back_idx_bag, 2], simdata[front_idx_sim, 2]-simdata[back_idx_sim, 2]
+                         ],
+            [
+                bagdata[front_idx_bag, 1] - bagdata[back_idx_bag, 1], simdata[front_idx_sim, 1] - simdata[back_idx_sim, 1]    ]
+        ) * 180 / math.pi
+        ang_errs.append( np.abs(ang_list[0] - ang_list[1]) )
+        l_errs.append(np.linalg.norm(bagdata[front_idx_bag, 1:3] - simdata[front_idx_sim, 1:3]))
+
+
+    # Loss *= err * np.exp(-i)
+
+
+    # print(t_stamp_sim)
+    # print(t_stamp_bag)
+    # plt.plot(np.array(sim_pos)[:t_stamp_sim[1], 0], np.array(sim_pos)[:t_stamp_sim[1], 1], color="green", label='sim')
+    # plt.plot(bagdata.copy()[:t_stamp_bag[1], 1], bagdata.copy()[:t_stamp_bag[1], 2], color='b', label='bag')
+    # plt.legend()
+    # plt.show()
+
+    return  np.sum(ang_errs)
+
+# def for_bayes():
+
 if __name__ == "__main__":
+
 
     bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited"
 
@@ -213,39 +282,47 @@ if __name__ == "__main__":
     bag_name = dir_list[7]
     bag = rosbag.Bag(os.path.join(bag_dir, bag_name))
     print(bag_name)
-    bagdata = read_bag(bag) # [n,4]
+    bagdata = read_bag(bag)  # [n,7]
+    # t_stamp_bag = get_collide_stamp(bagdata[:, :4].copy())
 
 
     # get linear velocity
 
-    lin_vel = get_lin_vel(bagdata.copy())  # [n,3]
-    init_pos = np.hstack((bagdata.copy()[0, 1:-1], 0.117)) # [3,]
+    lin_ang_vel = get_vel(bagdata.copy())  # [n,6]
+    init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
     #  get init vel + vel at z direction
-    init_lin_vel = np.hstack((vel2initvel(lin_vel, bagdata.copy()), 0))
-    angvel= 0
-    init_vel= np.hstack((init_lin_vel,np.array([0, 0, angvel])) )
+    lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
+    init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
 
-    parameters1 = [0.0001, 0.95, 0.8]
-    parameters2 = [0.0001, 0.95, 0.8]
+    # parameters = [0.6291124820709229,0.09892826458795258]
+    parameters = [0.00150021427, 0.80021938, 0.20901934, 0.80021864, 0.20020648]
 
-    model = Model(parameters1, init_pos, init_vel)
+    model = Model(parameters, init_pos, init_vel)
+
+    #  run bag
     # runbag(bagdata.copy())
-    t_sim, sim_pos, _ = model.sim_bullet('GUI') # [n,] [n,3] [n,3]
+
+    t_sim, sim_pos, _ = model.sim_bullet('GUI')  # [n,] [n,3] [n,3]
+    simdata = np.hstack((t_sim, sim_pos))   # [n,4]
 
 
+    plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata")
+    plt.plot(simdata[:,1], simdata[:,2], label="simdata")
+    plt.legend()
 
 
     #  data processing
+    loss = Lossfun(bagdata.copy(), simdata.copy())
+    print("loss value in grad = ", loss )
+
+    plt.show()
 
     # get time index where collision happens
-    t_stamp_bag = get_collide_stamp(bagdata.copy())
-    t_stamp_sim = get_collide_stamp(np.hstack((t_sim, sim_pos)))
-    print(t_stamp_sim)
-    plt.plot(np.array(sim_pos)[:t_stamp_sim[1], 0], np.array(sim_pos)[:t_stamp_sim[1], 1], color="green", label='sim')
-    plt.plot(bagdata.copy()[:t_stamp_bag[1], 1], bagdata.copy()[:t_stamp_bag[1], 2], color='b', label='original')
-    plt.legend()
-    plt.show()
-    None
-    # get_Err(t_sim, sim_pos, bagdata.copy())
+
+    # calculate Loss: Err of angle
+
+
+
+
 
 

@@ -2,6 +2,7 @@ import os
 import rosbag
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 
 
 
@@ -37,15 +38,41 @@ def plotdata(bagdata, bagtype, markers=None):
                 axes[-1].scatter(pos[m, 0], pos[m,1],color='red', s=3)
     fig.legend()
 
+def plot_obj(iters=30, n_suggestions=6 ):
+    params = []
+    objs = []
+    with open('iter30n6.txt', 'r') as reader:
+        for i, obj in enumerate(reader):
+            if i < 206:
+                pass
+            else:
+                obj = np.float64(obj.replace("[", " ").replace("]", " "))
+                objs.append(obj)
+                # num = [(x.strip(' "')) for x in obj]
+                #
+                # num = [n for n in num if n.isdecimal()]
+
+
+    objs = np.array(objs).reshape(int(len(objs) / n_suggestions), n_suggestions)
+    print('best obj:', np.argmin(objs) )
+    iter = np.linspace(0, iters, iters)
+    mean = np.mean(objs, axis=1)
+    plt.plot(iter, np.mean(objs, axis=1))
+    plt.fill_between(iter, mean +  np.std(objs, axis=1), mean - np.std(objs, axis=1), alpha=0.3)
+    plt.legend()
+
 if __name__ == "__main__":
 
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/"
-    dir_list = os.listdir(bag_dir)
-    dir_list.sort()
-    bag_name = dir_list[8]
+    # bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/"
+    # dir_list = os.listdir(bag_dir)
+    # dir_list.sort()
+    # bag_name = dir_list[8]
+    #
+    # bag_before = rosbag.Bag(os.path.join(bag_dir, bag_name))
+    # bag_after = rosbag.Bag(os.path.join(bag_dir + 'edited', bag_name))
+    # plotbag(bag_before, 'before')
+    # plotbag(bag_after, 'after')
 
-    bag_before = rosbag.Bag(os.path.join(bag_dir, bag_name))
-    bag_after = rosbag.Bag(os.path.join(bag_dir + 'edited', bag_name))
-    plotbag(bag_before, 'before')
-    plotbag(bag_after, 'after')
 
+    plot_obj()
+    plt.show()
