@@ -1,5 +1,4 @@
 import os
-from robots import __file__ as path_robots
 import numpy as np
 import time
 # import matplotlib.pyplot as plt
@@ -17,13 +16,13 @@ class Model:
         :param init_pos:
         :param init_vel:
         """
-        self.t_lateral_f = parameters[0]  # friction
-        self.left_rim_res = parameters[1]  #  resititution
-        self.right_rim_res = parameters[1]   # restitution
-        self.left_rim_f = parameters[2]  # friction
+        self.t_lateral_f = 0.01  # friction
+        self.left_rim_res = 1  #  resititution
+        self.right_rim_res = 1   # restitution
+        self.left_rim_f = 1  # friction
 
-        self.four_side_rim_res = parameters[3]  # restitution
-        self.four_side_rim_latf = parameters[4]  # friction
+        self.four_side_rim_res = parameters[0]  # restitution
+        self.four_side_rim_latf = parameters[1]  # friction
         # self.angvel = parameters[5]
 
 
@@ -75,9 +74,11 @@ class Model:
         p.setGravity(0., 0., -9.81)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
+        path_robots = "/home/hszlyw/PycharmProjects/ahky/robots"
+        # tablesize [2.14 x 1.22]
+        file = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
         self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
+        file = os.path.join(path_robots, "models", "puck", "model2.urdf")
         # self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
         self.puck = p.loadURDF(file, self.init_pos, [0, 0, 0.0, 1.0],flags=p.URDF_USE_INERTIA_FROM_FILE or p.URDF_MERGE_FIXED_LINKS)
         j_puck = self.get_joint_map(self.puck)
@@ -121,11 +122,11 @@ class Model:
         t_sim = [0]  # record time
         t = 0
         p.setTimeStep(1 / 120.)
-        while (np.abs(np.array(p.getBaseVelocity(self.puck))) > .01).any() and np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) <0.3:
+        while (np.abs(np.array(p.getBaseVelocity(self.puck)[0][:-1])) > .5).any() and np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) <0.3:
         # while True:
             p.stepSimulation()
-            time.sleep(1/120.)
-            t += 1/120
+            # time.sleep(1/120.)
+            # t += 1/120
             t_sim.append(t)
             new_pos = p.getBasePositionAndOrientation(self.puck)[0]
             pos.append(new_pos)
@@ -133,6 +134,7 @@ class Model:
             if mode == 'GUI':
                 p.addUserDebugLine(pre_pos, new_pos, lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
                 pre_pos = new_pos
+        p.disconnect()
         return np.array(t_sim)[:, None], np.array(pos), np.array(vel)
 
 
@@ -155,11 +157,24 @@ def get_vel(bagdata):
             filtered_slope = filter(slope.copy(), Wn)
             return filtered_slope
 
-        t_stueck = bagdata[-1, 0] / bagdata.shape[0]
+        t_stueck = (bagdata[-1, 0] - bagdata[0, 0]) / bagdata.shape[0]
         data = bagdata[:, 1:]  # data without time series
-        slope = Diff(t_stueck, data, 10, Wn=0.4)
+        slope = Diff(t_stueck, data, 6, Wn=0.4)
+
         return slope
 
+def back_process(slope):
+    # epre process, delete if vel <.01
+    for i, vel in enumerate(slope):
+        if (np.abs(vel[1:3]) < .01).all():
+            if i+5 == slope.shape[0]:
+                return i+4
+
+            elif (np.abs(slope[i + 5, 1:3]) < .01).all():
+                return i
+
+            else:
+                continue
 def vel2initvel(vel,bagdata):
     tan_theta = (bagdata[20, 1:3] - bagdata[0, 1:3])[1] / (bagdata[20, 1:3] - bagdata[0, 1:3])[0]
     cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
@@ -190,28 +205,28 @@ def get_Err(bagdata, simdata):
             idxs.append(idx)
         return np.sum(Err)
 
-def runbag(bagdata):
-        p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
-        p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
-
-        p.resetSimulation()
-        p.setPhysicsEngineParameter(numSolverIterations=150)
-        p.setGravity(0., 0., -9.81)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-
-
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
-        table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-        file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
-        readidx = 0
-        lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
-        puck = p.loadURDF(file, lastpuck, [0, 0, 0.0, 1.0])
-        while readidx < bagdata.shape[0]-1:
-            p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), [0, 0, 0, 1.])
-            p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
-            lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
-            readidx += 1
-        p.disconnect()
+# def runbag(bagdata):
+#         p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
+#         p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
+#
+#         p.resetSimulation()
+#         p.setPhysicsEngineParameter(numSolverIterations=150)
+#         p.setGravity(0., 0., -9.81)
+#         p.setAdditionalSearchPath(pybullet_data.getDataPath())
+#
+#
+#         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
+#         table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+#         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
+#         readidx = 0
+#         lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
+#         puck = p.loadURDF(file, lastpuck, [0, 0, 0.0, 1.0])
+#         while readidx < bagdata.shape[0]-1:
+#             p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), [0, 0, 0, 1.])
+#             p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+#             lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
+#             readidx += 1
+#         p.disconnect()
 
 def Lossfun(bagdata, simdata, mode='GUI'):
     t_stamp_bag = get_collide_stamp(bagdata)
@@ -268,6 +283,36 @@ def Lossfun(bagdata, simdata, mode='GUI'):
 
     return  np.sum(ang_errs)
 
+def Lossfun2(bagdata, simdata, mode='GUI'):
+
+
+    if mode == 'GUI':
+        plotdata(simdata, 'sim')
+        plotdata(bagdata, 'bag')
+    else:
+        pass
+
+    ang_bag = np.arctan2([
+        bagdata[5, 2]-bagdata[15, 2], bagdata[-5, 2]-bagdata[-15, 2]
+                     ],
+        [
+            bagdata[5, 1] - bagdata[15, 1], bagdata[-5, 1] - bagdata[-15, 1]  ]
+    ) * 180 / math.pi
+
+    ang_sim = np.arctan2([
+        simdata[5, 2] - simdata[15, 2], simdata[-5, 2] - simdata[-15, 2]
+    ],
+        [
+            simdata[5, 1] - simdata[15, 1], simdata[-5, 1] - simdata[-15, 1]]
+    ) * 180 / math.pi
+
+    delta_bag = np.abs(ang_bag[0] - ang_bag[1])
+    delta_sim = np.abs(ang_sim[0] - ang_sim[1])
+
+    loss = np.abs(delta_bag - delta_sim)
+    return  loss
+
+
 # def for_bayes():
 
 if __name__ == "__main__":
@@ -288,14 +333,14 @@ if __name__ == "__main__":
 
     # get linear velocity
 
-    lin_ang_vel = get_vel(bagdata.copy())  # [n,6]
+    lin_ang_vel = get_vel(bagdata.copy())  # return [n,6]
     init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
     #  get init vel + vel at z direction
     lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
     init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
 
     # parameters = [0.6291124820709229,0.09892826458795258]
-    parameters = [0.00150021427, 0.80021938, 0.20901934, 0.80021864, 0.20020648]
+    parameters = [ 0.80021938, 0.50901934]
 
     model = Model(parameters, init_pos, init_vel)
 

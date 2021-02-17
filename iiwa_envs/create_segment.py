@@ -138,53 +138,54 @@ def segment2file():
 
         for i in range(len(shortrim_set)):
             short_datadir = os.path.join(shortdir + str(writename1) + ".txt")
-            # if not os.path.exists(short_datadir):
-            #     os.mkdir(short_datadir)
-            file = open(short_datadir, 'w')
-            for item in shortrim_set[i]:
-                file.write("%s\n" % item)
-            file.close()
-            writename1 += 1
+
+            with open(short_datadir, 'w') as file:
+                for item in np.array(shortrim_set[i]):
+                    ls = []
+                    for v in item:
+                        ls.append(v)
+                    file.write(str(ls))
+                    file.write('\n')
+                file.close()
+                writename1 += 1
 
         for i in range(len(longrim_set)):
             long_datadir = os.path.join(longdir + str(writename2) + ".txt")
 
-            # if not os.path.exists(long_datadir):
-            #     os.mkdir(long_datadir)
-
-            file = open(long_datadir, 'w')
-            for item in longrim_set[i]:
-                file.write("%s\n" % item)
-            file.close()
-            writename2 += 1
+            with open(long_datadir, 'w') as file:
+                for item in np.array(longrim_set[i]):
+                    ls = []
+                    for v in item:
+                        ls.append(v)
+                    file.write(str(ls))
+                    file.write('\n')
+                file.close()
+                writename2 += 1
 
 
 if __name__ == "__main__":
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/longrim_collision/unusable/"
+    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/shortrim_collision/"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
 
+    #
+    for i in range(len(dir_list)):
+        filename = dir_list[i]
+        print(filename)
+        data = []
 
+        # with open(bag_dir + filename, 'r') as f:
+        with open(bag_dir+'8.txt', 'r') as f:
 
-    i = 39
-
-
-
-    filename = dir_list[i]
-    print(filename)
-    data = []
-
-    f = open(bag_dir + filename, 'r')
-    for i, item in enumerate(f):
-        if i % 2 != 0:
-            pass
-        else:
-            data.append(np.array(np.float64(item.replace("[", " ").replace("\n", " ").split() ) ))
-    data = np.array(data)
-    plt.plot(data[:, 1], data[:, 2], label=filename)
-    plt.legend()
+            for line in f:
+                data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split() ) ))
+            data = np.array(data)
+            plt.plot(data[:, 1], data[:, 2], label=filename)
+        # plt.legend()
     plt.show()
 
+
+    # segment2file()
 
 
