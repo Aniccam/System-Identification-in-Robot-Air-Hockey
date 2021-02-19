@@ -16,13 +16,13 @@ class Model:
         :param init_pos:
         :param init_vel:
         """
-        self.t_lateral_f = 0.01  # friction
-        self.left_rim_res = 1  #  resititution
-        self.right_rim_res = 1   # restitution
-        self.left_rim_f = 1  # friction
+        self.t_lateral_f = 0.007  # friction
+        self.left_rim_res = parameters[0]  #  resititution
+        self.right_rim_res = parameters[0]   # restitution
+        self.left_rim_f = parameters[1]  # friction
 
-        self.four_side_rim_res = parameters[0]  # restitution
-        self.four_side_rim_latf = parameters[1]  # friction
+        self.four_side_rim_res =  1 # restitution
+        self.four_side_rim_latf = 1  # friction
         # self.angvel = parameters[5]
 
 
@@ -58,7 +58,7 @@ class Model:
         p.setCollisionFilterPair(puck, table, -1, 7, 1)
         p.setCollisionFilterPair(puck, table, -1, 8, 1)
 
-    def sim_bullet(self, mode='GUI'):
+    def sim_bullet(self, table, mode='GUI'):
 
         if mode == "GUI":
             self.mode = "GUI"
@@ -77,7 +77,8 @@ class Model:
         path_robots = "/home/hszlyw/PycharmProjects/ahky/robots"
         # tablesize [2.14 x 1.22]
         file = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
-        self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+        # self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+        self.table = p.loadURDF(file, list(table[:3]), list(table[3:]))
         file = os.path.join(path_robots, "models", "puck", "model2.urdf")
         # self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
         self.puck = p.loadURDF(file, self.init_pos, [0, 0, 0.0, 1.0],flags=p.URDF_USE_INERTIA_FROM_FILE or p.URDF_MERGE_FIXED_LINKS)
@@ -122,7 +123,7 @@ class Model:
         t_sim = [0]  # record time
         t = 0
         p.setTimeStep(1 / 120.)
-        while (np.abs(np.array(p.getBaseVelocity(self.puck)[0][:-1])) > .5).any() and np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) <0.3:
+        while (np.abs(np.array(p.getBaseVelocity(self.puck)[0][:-1])) > .5).any() and .115< np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) < 1.2:
         # while True:
             p.stepSimulation()
             # time.sleep(1/120.)
@@ -159,7 +160,7 @@ def get_vel(bagdata):
 
         t_stueck = (bagdata[-1, 0] - bagdata[0, 0]) / bagdata.shape[0]
         data = bagdata[:, 1:]  # data without time series
-        slope = Diff(t_stueck, data, 6, Wn=0.4)
+        slope = Diff(t_stueck, data, 3, Wn=0.4)
 
         return slope
 
@@ -205,28 +206,28 @@ def get_Err(bagdata, simdata):
             idxs.append(idx)
         return np.sum(Err)
 
-# def runbag(bagdata):
-#         p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
-#         p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
-#
-#         p.resetSimulation()
-#         p.setPhysicsEngineParameter(numSolverIterations=150)
-#         p.setGravity(0., 0., -9.81)
-#         p.setAdditionalSearchPath(pybullet_data.getDataPath())
-#
-#
-#         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "air_hockey_table", "model.urdf")
-#         table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-#         file = os.path.join(os.path.dirname(os.path.abspath(path_robots)), "models", "puck", "model2.urdf")
-#         readidx = 0
-#         lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
-#         puck = p.loadURDF(file, lastpuck, [0, 0, 0.0, 1.0])
-#         while readidx < bagdata.shape[0]-1:
-#             p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), [0, 0, 0, 1.])
-#             p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
-#             lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
-#             readidx += 1
-#         p.disconnect()
+def runbag(bagdata):
+        p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
+        p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
+
+        p.resetSimulation()
+        p.setPhysicsEngineParameter(numSolverIterations=150)
+        p.setGravity(0., 0., -9.81)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+        path_robots = "/home/hszlyw/PycharmProjects/ahky/robots"
+        file = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
+        table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+        file = os.path.join(path_robots, "models", "puck", "model2.urdf")
+        readidx = 0
+        lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
+        puck = p.loadURDF(file, lastpuck, [0, 0, 0.0, 1.0])
+        while readidx < bagdata.shape[0]-1:
+            p.resetBasePositionAndOrientation(puck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), [0, 0, 0, 1.])
+            p.addUserDebugLine(lastpuck, np.hstack((bagdata[readidx+1, 1:3], 0.11945)), lineColorRGB=[0.5, 0.5, 0.5], lineWidth=3)
+            lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
+            readidx += 1
+        p.disconnect()
 
 def Lossfun(bagdata, simdata, mode='GUI'):
     t_stamp_bag = get_collide_stamp(bagdata)
@@ -286,78 +287,137 @@ def Lossfun(bagdata, simdata, mode='GUI'):
 def Lossfun2(bagdata, simdata, mode='GUI'):
 
 
+    def get_collide_point(data):
+        # print(data.shape)
+        h = 3
+        for i in range(h, data.shape[0]):
+            # print("iter=", i, "i+h=", i+h)
+            if i + h >= data.shape[0]:
+                # print("1")
+                # plt.plot(simdata[:,1], simdata[:,2])
+                # plt.show()
+
+                return 6839, 7362
+            elif ((
+                    (data[i, 1:3] - data[i-h, 1:3])
+                    *
+                    (data[i+h, 1:3] - data[i, 1:3])
+            ) < 0 ).any():
+
+                before_collide_idx = i
+                after_collide_idx = i + 2*h
+                # print("2")
+
+                return before_collide_idx, after_collide_idx
+
+            else:
+                # print("3")
+
+                continue
+
+
+
+
     if mode == 'GUI':
         plotdata(simdata, 'sim')
         plotdata(bagdata, 'bag')
     else:
         pass
 
+    margin = 7
+    b_b, b_a = get_collide_point(bagdata)
     ang_bag = np.arctan2([
-        bagdata[5, 2]-bagdata[15, 2], bagdata[-5, 2]-bagdata[-15, 2]
+        bagdata[b_b - margin, 2]-bagdata[b_b, 2], bagdata[b_a + margin, 2]-bagdata[b_a, 2]
                      ],
         [
-            bagdata[5, 1] - bagdata[15, 1], bagdata[-5, 1] - bagdata[-15, 1]  ]
+            bagdata[b_b - margin, 1] - bagdata[b_b, 1], bagdata[b_a + margin, 1] - bagdata[b_a, 1]  ]
     ) * 180 / math.pi
 
-    ang_sim = np.arctan2([
-        simdata[5, 2] - simdata[15, 2], simdata[-5, 2] - simdata[-15, 2]
-    ],
-        [
-            simdata[5, 1] - simdata[15, 1], simdata[-5, 1] - simdata[-15, 1]]
-    ) * 180 / math.pi
+    s_b, s_a = get_collide_point(simdata)
+    if s_b == 6839 and s_a == 7362:
+        return 180.3334
+    else:
+        while s_b - margin < 0 :
+            margin -= 1
+        while s_a + margin > simdata.shape[0]-1:
+            margin -= 1
+        if margin < 0:
+            return 180.3334
+        else:
+            # print("sb-margin", s_b, s_b-margin)
+            # print("sa+margin", s_a, s_a+margin)
 
-    delta_bag = np.abs(ang_bag[0] - ang_bag[1])
-    delta_sim = np.abs(ang_sim[0] - ang_sim[1])
+            ang_sim = np.arctan2([
+                simdata[s_b - margin, 2]-simdata[s_b, 2], simdata[s_a + margin, 2]-simdata[s_a, 2]
+                             ],
+                [
+                    simdata[s_b - margin, 1] - simdata[s_b, 1], simdata[s_a + margin, 1] - simdata[s_a, 1]  ]
+            ) * 180 / math.pi
 
-    loss = np.abs(delta_bag - delta_sim)
-    return  loss
+            delta_bag = np.abs(ang_bag[0] - ang_bag[1])
+            delta_sim = np.abs(ang_sim[0] - ang_sim[1])
 
+            loss = np.abs(delta_bag - delta_sim)
+            return loss
 
-# def for_bayes():
 
 if __name__ == "__main__":
 
 
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited"
+    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/dataset_long/"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
 
     # choose bag file
-    bag_name = dir_list[7]
-    bag = rosbag.Bag(os.path.join(bag_dir, bag_name))
-    print(bag_name)
-    bagdata = read_bag(bag)  # [n,7]
-    # t_stamp_bag = get_collide_stamp(bagdata[:, :4].copy())
+    # bag_name = dir_list[2]
+    filename = "0_.txt"
+    print(filename)
+    data = []
+    with open(bag_dir + filename, 'r') as f:
+        for line in f:
+            data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split())))
+        bagdata = np.array(data)
+        table = bagdata[0, :]
+        table[2] = 0.11945
+        bagdata = bagdata[1:, :]
+        bagdata[:,3] = 0.11945 * np.ones(bagdata.shape[0])
 
 
     # get linear velocity
 
-    lin_ang_vel = get_vel(bagdata.copy())  # return [n,6]
-    init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
-    #  get init vel + vel at z direction
-    lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
-    init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
 
-    # parameters = [0.6291124820709229,0.09892826458795258]
-    parameters = [ 0.80021938, 0.50901934]
+        lin_ang_vel = get_vel(bagdata.copy())  # return [n,6]
+        init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
+        #  get init vel + vel at z direction
 
-    model = Model(parameters, init_pos, init_vel)
+        ###########
+
+        init_vel = lin_ang_vel[0, :]
+
+        # lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
+        # init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
 
     #  run bag
     # runbag(bagdata.copy())
 
-    t_sim, sim_pos, _ = model.sim_bullet('GUI')  # [n,] [n,3] [n,3]
+    # parameters = [0.6291124820709229,0.09892826458795258]
+    parameters = [ 0.65, 0.35, 1, 1]
+
+    model = Model(parameters, init_pos, init_vel)
+
+
+    t_sim, sim_pos, _ = model.sim_bullet(table, 'GUI')  # [n,] [n,3] [n,3]
     simdata = np.hstack((t_sim, sim_pos))   # [n,4]
 
 
-    plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata")
-    plt.plot(simdata[:,1], simdata[:,2], label="simdata")
+    plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata", marker= 'o')
+    plt.plot(simdata[:,1], simdata[:,2], label="simdata", marker= '.')
     plt.legend()
 
 
     #  data processing
-    loss = Lossfun(bagdata.copy(), simdata.copy())
+    loss = Lossfun2(bagdata.copy(), simdata.copy())
     print("loss value in grad = ", loss )
 
     plt.show()

@@ -6,6 +6,7 @@ from plot_bag import plotdata
 import tf
 import rosbag
 from angles import shortest_angular_distance
+from scipy import signal
 
 def get_collide_stamp(bagdata):
 
@@ -38,28 +39,39 @@ def get_collide_stamp(bagdata):
     stamp = np.array(stamp)
     return stamp
 
-def get_segment_dataset(data, t_stamp):
+def get_segment_dataset(data, t_stamp, table):
+    table.reshape(1,7)
     shortrim_set = []
     longrim_set = []
+    margin = 0.3
     for i, t in enumerate(t_stamp):
-        if data[t, 1] > 2.58 or data[t, 1] < 0.8:
-            print(t, "short")
+        if data[t, 1] > table[0] + 0.98 - margin or data[t, 1] < table[0] - 0.98 + margin:
+            # print(t, "short")
             if i == len(t_stamp)-1:
-                shortrim_set.append(data[t_stamp[i-1]:, :])
+                temp = np.vstack((table, data[t_stamp[i-1]:, :]))
+                shortrim_set.append(temp)
             elif i == 0:
-                shortrim_set.append(data[:t_stamp[i+1], :])
+                temp = np.vstack((table, data[:t_stamp[i+1], :]))
+                shortrim_set.append(temp)
             else:
-                shortrim_set.append(data[t_stamp[i-1]+10: t_stamp[i+1], :])
-        elif data[t, 2] > 1.29 or data[t, 2] < 0.77:
-            print(t, "longrim")
+                temp = np.vstack((table, data[t_stamp[i-1]+10: t_stamp[i+1], :]))
+                shortrim_set.append(temp)
+
+        elif data[t, 2] > table[1] + 0.52 - margin or data[t, 2] < table[1] - 0.52 + margin:
+            # print(t, "longrim")
             if i == len(t_stamp)-1:
-                longrim_set.append(data[t_stamp[i-1]:, :])
+                temp = np.vstack((table, data[t_stamp[i-1]:, :]))
+                longrim_set.append(temp)
             elif i == 0:
-                longrim_set.append(data[:t_stamp[i+1], :])
+                temp = np.vstack((table, data[:t_stamp[i+1], :]))
+                longrim_set.append(temp)
             else:
-                longrim_set.append(data[t_stamp[i-1]+10:t_stamp[i+1], :])
+                temp = np.vstack((table, data[t_stamp[i-1]+10:t_stamp[i+1], :]))
+                longrim_set.append(temp)
+
         else:
-            print('at the corner')
+            # print('at the corner')
+            pass
 
     return shortrim_set, longrim_set
 
@@ -67,6 +79,7 @@ def read_bag(bag):
     pos = []
     ori = []
     t = []
+    table_poses = []
     for topic, msg, _ in bag.read_messages('/tf'):
         if msg.transforms[0].child_frame_id == "Puck":
             pos.append([msg.transforms[0].transform.translation.x, msg.transforms[0].transform.translation.y,
@@ -74,6 +87,18 @@ def read_bag(bag):
             ori.append([msg.transforms[0].transform.rotation.x, msg.transforms[0].transform.rotation.y,
                         msg.transforms[0].transform.rotation.z, msg.transforms[0].transform.rotation.w])
             t.append(msg.transforms[0].header.stamp.to_sec())
+        elif msg.transforms[0].child_frame_id == "Table":
+            # count_table += 1
+            pose_i = np.array([msg.transforms[0].transform.translation.x,
+                               msg.transforms[0].transform.translation.y,
+                               msg.transforms[0].transform.translation.z,
+                               msg.transforms[0].transform.rotation.x,
+                               msg.transforms[0].transform.rotation.y,
+                               msg.transforms[0].transform.rotation.z,
+                               msg.transforms[0].transform.rotation.w])
+            if len(table_poses) == 0 or not np.equal(np.linalg.norm(table_poses[-1][2] - pose_i[2]), 0):
+                table_poses.append(pose_i)
+
     ori = np.array(ori)  # original orientation
 
     # quaternion 2 euler
@@ -95,7 +120,7 @@ def read_bag(bag):
     # bagdata[:, -1] = elimated_ori
     bagdata[:, -1] = ori
 
-    return bagdata
+    return bagdata, table_poses
 
 def plt_segment(set):
     if set != []:
@@ -119,23 +144,29 @@ def plt_segment(set):
         #     fig2.show()
 
 def segment2file():
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited"
+    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/1204 bags"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
-    writename1 = 0
-    writename2 = 0
+    writename1 = 100
+    writename2 = 100
 
     for bag_name in dir_list:
         bag = rosbag.Bag(os.path.join(bag_dir, bag_name))
-
-        bagdata = read_bag(bag)
+        # print(bag_name)
+        bagdata, table = read_bag(bag)
+        table = [np.array([1.7, 0.85, 0.11945, 0., 0., 0., 1.]) ]
         t_stamp = get_collide_stamp(bagdata)
         # plotdata(bagdata, 'bag', t_stamp)
-        shortrim_set, longrim_set = get_segment_dataset(bagdata, t_stamp)
-        shortdir = os.path.join(bag_dir + "/shortrim_collision/")
-        longdir = os.path.join(bag_dir + "/longrim_collision/")
+        # print(table)
+        shortrim_set, longrim_set = get_segment_dataset(bagdata.copy(), t_stamp.copy(), table[0])
+        # shortrim_set, longrim_set = get_segment_dataset(bagdata.copy(), t_stamp.copy(), [1.7, 0.85, 0.117, 0., 0., 0., 1.])
 
+
+        # shortdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/shortrim_collision/")
+        # longdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/longrim_collision/")
+        shortdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/1204short/")
+        longdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/1204long/")
         for i in range(len(shortrim_set)):
             short_datadir = os.path.join(shortdir + str(writename1) + ".txt")
 
@@ -154,6 +185,7 @@ def segment2file():
 
             with open(long_datadir, 'w') as file:
                 for item in np.array(longrim_set[i]):
+                    # print(item)
                     ls = []
                     for v in item:
                         ls.append(v)
@@ -164,7 +196,7 @@ def segment2file():
 
 
 if __name__ == "__main__":
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/shortrim_collision/"
+    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/dataset_long/"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
@@ -175,15 +207,15 @@ if __name__ == "__main__":
         print(filename)
         data = []
 
-        # with open(bag_dir + filename, 'r') as f:
-        with open(bag_dir+'8.txt', 'r') as f:
+        with open(bag_dir + filename, 'r') as f:
+        # with open(bag_dir+'8.txt', 'r') as f:
 
             for line in f:
                 data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split() ) ))
             data = np.array(data)
-            plt.plot(data[:, 1], data[:, 2], label=filename)
-        # plt.legend()
-    plt.show()
+            plt.plot(data[1:, 1], data[1:, 2], label=filename)
+        plt.legend()
+        plt.show()
 
 
     # segment2file()
