@@ -16,13 +16,14 @@ class Model:
         :param init_pos:
         :param init_vel:
         """
-        self.t_lateral_f = 0.007  # friction
+        #          parameters = [0.89999997588924,0.07727587968111038, 0.8999999761581421, 0.0117223169654607771]
+        self.t_lateral_f = 0.000000472   # friction
         self.left_rim_res = parameters[0]  #  resititution
-        self.right_rim_res = parameters[0]   # restitution
-        self.left_rim_f = parameters[1]  # friction
+        self.right_rim_res = parameters[0]  # restitution
+        self.left_rim_f = parameters[1] # friction
 
-        self.four_side_rim_res =  1 # restitution
-        self.four_side_rim_latf = 1  # friction
+        self.four_side_rim_res = parameters[2] # restitution
+        self.four_side_rim_latf = parameters[3]  # friction
         # self.angvel = parameters[5]
 
 
@@ -86,6 +87,8 @@ class Model:
         j_table = self.get_joint_map(self.table)
         p.changeDynamics(self.puck, -1, lateralFriction=1)
         p.changeDynamics(self.puck, -1, restitution=1)
+        p.changeDynamics(self.puck, -1, linearDamping=0.0006)
+
         # p.changeDynamics(self.puck, -1, restitution=0.8)
 
         # load parameters
@@ -110,6 +113,7 @@ class Model:
         p.changeDynamics(self.table, j_table.get(b'base_up_rim_l'), restitution=self.four_side_rim_res)
         p.changeDynamics(self.table, j_table.get(b'base_up_rim_r'), restitution=self.four_side_rim_res)
         p.changeDynamics(self.table, j_table.get(b'base_up_rim_top'), restitution=self.four_side_rim_res) # no collision
+
 
         # init puck
 
@@ -284,7 +288,7 @@ def Lossfun(bagdata, simdata, mode='GUI'):
 
     return  np.sum(ang_errs)
 
-def Lossfun2(bagdata, simdata, mode='GUI'):
+def Lossfun2(bagdata, simdata, table, mode='GUI'):
 
 
     def get_collide_point(data):
@@ -303,7 +307,7 @@ def Lossfun2(bagdata, simdata, mode='GUI'):
                     *
                     (data[i+h, 1:3] - data[i, 1:3])
             ) < 0 ).any():
-
+                idx = 0
                 before_collide_idx = i
                 after_collide_idx = i + 2*h
                 # print("2")
@@ -318,23 +322,40 @@ def Lossfun2(bagdata, simdata, mode='GUI'):
 
 
 
-    if mode == 'GUI':
-        plotdata(simdata, 'sim')
-        plotdata(bagdata, 'bag')
-    else:
-        pass
-
-    margin = 7
+    # if mode == 'GUI':
+    #     plotdata(simdata, 'sim')
+    #     plotdata(bagdata, 'bag')
+    # else:
+    #     pass
+    table = list(table)
+    x_ub = table[0] + 0.98
+    x_lb = table[0] - 0.98
+    y_ub = table[1] + 0.54
+    y_lb = table[1] - 0.54
+    margin = 6
     b_b, b_a = get_collide_point(bagdata)
-    ang_bag = np.arctan2([
-        bagdata[b_b - margin, 2]-bagdata[b_b, 2], bagdata[b_a + margin, 2]-bagdata[b_a, 2]
-                     ],
-        [
-            bagdata[b_b - margin, 1] - bagdata[b_b, 1], bagdata[b_a + margin, 1] - bagdata[b_a, 1]  ]
-    ) * 180 / math.pi
+    # print("bb ba",b_b, b_a)
+    # print("bagdatashape", bagdata.shape[0])
+
+    while b_b - margin < 0:
+        margin -= 1
+    while b_a + margin > bagdata.shape[0] - 1:
+        margin -= 1
+    if margin < 0:
+        # print("b_b, b_a problems 2")
+
+        return 180.3334
+    else:
+        ang_bag = np.arctan2([
+            bagdata[b_b - margin, 2]-bagdata[b_b, 2], bagdata[b_a + margin, 2]-bagdata[b_a, 2]
+                         ],
+            [
+                bagdata[b_b - margin, 1] - bagdata[b_b, 1], bagdata[b_a + margin, 1] - bagdata[b_a, 1]  ]
+        ) * 180 / math.pi
 
     s_b, s_a = get_collide_point(simdata)
     if s_b == 6839 and s_a == 7362:
+        # print("s_b, s_a problems 1")
         return 180.3334
     else:
         while s_b - margin < 0 :
@@ -342,6 +363,8 @@ def Lossfun2(bagdata, simdata, mode='GUI'):
         while s_a + margin > simdata.shape[0]-1:
             margin -= 1
         if margin < 0:
+            # print("s_b, s_a problems 2")
+
             return 180.3334
         else:
             # print("sb-margin", s_b, s_b-margin)
@@ -349,82 +372,210 @@ def Lossfun2(bagdata, simdata, mode='GUI'):
 
             ang_sim = np.arctan2([
                 simdata[s_b - margin, 2]-simdata[s_b, 2], simdata[s_a + margin, 2]-simdata[s_a, 2]
-                             ],
+                             ] ,
                 [
                     simdata[s_b - margin, 1] - simdata[s_b, 1], simdata[s_a + margin, 1] - simdata[s_a, 1]  ]
             ) * 180 / math.pi
 
             delta_bag = np.abs(ang_bag[0] - ang_bag[1])
             delta_sim = np.abs(ang_sim[0] - ang_sim[1])
+            loss_ang = np.log( np.abs(delta_bag - delta_sim) + 1)
 
-            loss = np.abs(delta_bag - delta_sim)
-            return loss
+
+            return loss_ang
+            #############################################
+
+            # ################   linear loss till the end #############
+            #
+            # endx_ub =  y_lb < (
+            #         (bagdata[b_a + margin, 2] - bagdata[b_a, 2] ) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1] ) * (x_ub - bagdata[b_a, 1]) + bagdata[b_a, 2]
+            # ) < y_ub
+            #
+            #
+            #
+            # endx_lb = y_lb < (
+            #         (bagdata[b_a + margin, 2] - bagdata[b_a, 2] ) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1] ) * (x_lb - bagdata[b_a, 1]) + bagdata[b_a, 2]
+            # ) < y_ub
+            #
+            # endy_ub =  x_lb < (
+            #         (y_ub - bagdata[b_a, 2]) * (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) / (bagdata[b_a + margin, 2] - bagdata[b_a, 2]) + bagdata[b_a, 1]
+            #
+            # ) < x_ub
+            #
+            #
+            # endy_lb =  x_lb < (
+            #         (y_lb - bagdata[b_a, 2]) * (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) / (bagdata[b_a + margin, 2] - bagdata[b_a, 2]) + bagdata[b_a, 1]
+            #     ) < x_ub
+            #
+            #
+            #
+            # # loss_dis = print("belongs to none rim")
+            #
+            #
+            #
+            # if (simdata[s_a + margin, 1] - simdata[s_a, 1] > 0 ) and endx_ub:
+            #     y3_b = (
+            #             (bagdata[b_a + margin, 2] - bagdata[b_a, 2]) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) * (
+            #                 x_ub - bagdata[b_a, 1]) + bagdata[b_a, 2]
+            #     )
+            #     y3_s = (
+            #             (simdata[s_a + margin, 2] - simdata[s_a, 2]) / (simdata[s_a + margin, 1] - simdata[s_a, 1]) * (
+            #                 x_ub - simdata[s_a, 1]) + simdata[s_a, 2]
+            #     )
+            #     loss_dis = np.abs(y3_b - y3_s)
+            #     # print("disslos=", np.log(loss_dis * 1000 + 1))
+            #     # print("angloss=", loss_ang)
+            #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
+            #     # print("*" * 100)
+            #
+            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #
+            # elif (simdata[s_a + margin, 1] - simdata[s_a, 1] < 0 ) and endx_lb:
+            #     y3_b = (
+            #             (bagdata[b_a + margin, 2] - bagdata[b_a, 2]) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) * (
+            #                 x_lb - bagdata[b_a, 1]) + bagdata[b_a, 2]
+            #     )
+            #     y3_s = (
+            #             (simdata[s_a + margin, 2] - simdata[s_a, 2]) / (simdata[s_a + margin, 1] - simdata[s_a, 1]) * (
+            #                 x_lb - simdata[s_a, 1]) + simdata[s_a, 2]
+            #     )
+            #     loss_dis = np.abs(y3_b - y3_s)
+            #     # print("disslos=", np.log(loss_dis * 1000 + 1))
+            #     # print("angloss=", loss_ang)
+            #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
+            #     # print("*" * 100)
+            #
+            #
+            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #
+            # elif (simdata[s_a + margin, 2] - simdata[s_a, 2] > 0 ) and endy_ub:
+            #     x3_b = (
+            #             (y_ub - bagdata[b_a, 2]) * (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) / (
+            #                 bagdata[b_a + margin, 2] - bagdata[b_a, 2]) + bagdata[b_a, 1]
+            #
+            #     )
+            #     x3_s = (
+            #             (y_ub - simdata[s_a, 2]) * (simdata[s_a + margin, 1] - simdata[s_a, 1]) / (
+            #                 simdata[s_a + margin, 2] - simdata[s_a, 2]) + simdata[s_a, 1]
+            #
+            #     )
+            #     loss_dis = np.abs(x3_b - x3_s)
+            #     # print("disslos=", np.log(loss_dis * 1000 + 1))
+            #     # print("angloss=", loss_ang)
+            #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
+            #     # print("*" * 100)
+            #
+            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #
+            # elif (simdata[s_a + margin, 2] - simdata[s_a, 2] < 0 ) and endy_lb:
+            #     x3_b = (
+            #             (y_lb - bagdata[b_a, 2]) * (bagdata[b_a + margin, 1] - bagdata[b_a, 1]) / (
+            #                 bagdata[b_a + margin, 2] - bagdata[b_a, 2]) + bagdata[b_a, 1]
+            #
+            #     )
+            #     x3_s = (
+            #             (y_lb - simdata[s_a, 2]) * (simdata[s_a + margin, 1] - simdata[s_a, 1]) / (
+            #                 simdata[s_a + margin, 2] - simdata[s_a, 2]) + simdata[s_a, 1]
+            #
+            #     )
+            #     loss_dis = np.abs(x3_b - x3_s)
+            #
+            #     # print("disslos=", np.log(loss_dis * 1000 + 1))
+            #     # print("angloss=", loss_ang)
+            #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
+            #     # print("*" * 100)
+            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #
+            # else:
+            #     # print("bug at estimate end point")
+            #     return 180.3334
+            #
 
 
 if __name__ == "__main__":
 
-
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/dataset_long/"
-
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/long_side"
+    # bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/bagfiles/"
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
 
+
     # choose bag file
-    # bag_name = dir_list[2]
-    filename = "0_.txt"
-    print(filename)
-    data = []
-    with open(bag_dir + filename, 'r') as f:
-        for line in f:
-            data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split())))
-        bagdata = np.array(data)
-        table = bagdata[0, :]
+    # filename = dir_list[6]
+    count = 0
+    Loss = 0
+    for filename in dir_list:
+        # filename = dir_list[5]
+        bag = rosbag.Bag(os.path.join(bag_dir, filename))
+        # filename = "111.txt"
+        print(filename)
+        data = []
+
+        # with open(bag_dir + filename, 'r') as f:
+        #     for line in f:
+        #         data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split())))
+        #     bagdata = np.array(data)
+
+        bagdata, table = read_bag(bag)
+        # table = np.array([1.7, 0.85, 0.117, 0., 0., 0., 1.])
+        table = np.array(table)[0, :]
+        # table = bagdata[0, :]
         table[2] = 0.11945
-        bagdata = bagdata[1:, :]
-        bagdata[:,3] = 0.11945 * np.ones(bagdata.shape[0])
+        # bagdata = bagdata[1:, :]
+        bagdata[:, 3] = 0.11945 * np.ones(bagdata.shape[0])
 
 
     # get linear velocity
 
 
         lin_ang_vel = get_vel(bagdata.copy())  # return [n,6]
-        init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
+        begin_idx = np.argmax(np.abs(lin_ang_vel[:, 1]))
+        init_pos = np.hstack((bagdata.copy()[begin_idx, 1:3], 0.11945)) # [3,]
+
         #  get init vel + vel at z direction
 
         ###########
 
-        init_vel = lin_ang_vel[0, :]
+        init_vel = lin_ang_vel[begin_idx, :]
+
 
         # lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
         # init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
 
     #  run bag
-    # runbag(bagdata.copy())
+    #     runbag(bagdata.copy())
+        plt.plot(bagdata[:, 1], bagdata[:, 2])
+        plt.show()
+        # parameters = [0.89999997588924,0.0862029979358403, 0.8999999761581421, 0.0117223169654607771]  # loss is angle
+        # parameters = [0.8999985117910535, 0.08618541772442043,0.699999988079071, 0.4000000059604645] # loss is dis
+        shortparams= [0.699999988079071, 0.4000000059604645, ]
+        parameters = [ 0.8254059088662781,0.10319242853023827, 0.9299991355795136,0.014490739442408085, 0.010485903276094338]
 
-    # parameters = [0.6291124820709229,0.09892826458795258]
-    parameters = [ 0.65, 0.35, 1, 1]
-
-    model = Model(parameters, init_pos, init_vel)
-
-
-    t_sim, sim_pos, _ = model.sim_bullet(table, 'GUI')  # [n,] [n,3] [n,3]
-    simdata = np.hstack((t_sim, sim_pos))   # [n,4]
-
-
-    plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata", marker= 'o')
-    plt.plot(simdata[:,1], simdata[:,2], label="simdata", marker= '.')
-    plt.legend()
+        model = Model(parameters, init_pos, init_vel)
 
 
-    #  data processing
-    loss = Lossfun2(bagdata.copy(), simdata.copy())
-    print("loss value in grad = ", loss )
+        t_sim, sim_pos, _ = model.sim_bullet(table, 'DIRECT')  # [n,] [n,3] [n,3]
+        simdata = np.hstack((t_sim, sim_pos))   # [n,4]
 
-    plt.show()
+        plt.figure(figsize=(19.6, 10.4))
+        plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata", marker= '.' )
+        plt.plot(simdata[:,1], simdata[:,2], label="simdata", marker= '.')
+        plt.title(filename)
+        plt.legend()
+        plt.show()
+        # plt.savefig("/home/hszlyw/PycharmProjects/ahky/iiwa_envs/results_v1/traj/"+ filename+'.png', dpi=300)
 
-    # get time index where collision happens
-
-    # calculate Loss: Err of angle
+        print("number", count)
+        #  data processing
+        loss = Lossfun2(bagdata.copy(), simdata.copy(), table)
+        # print("loss value in grad = ", loss )
+        # Loss = Loss + loss
+        # # plt.show()
+        # print("Loss value in grad = ", Loss )
+        # count += 1
+        # # get time index where collision happens
+        print("saved")
+        # calculate Loss: Err of angle
 
 
 
