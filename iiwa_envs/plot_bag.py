@@ -63,16 +63,17 @@ def plot_obj(iters=30, n_suggestions=6 ):
 
 if __name__ == "__main__":
 
-    # bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/"
-    # dir_list = os.listdir(bag_dir)
-    # dir_list.sort()
-    # bag_name = dir_list[8]
-    #
-    # bag_before = rosbag.Bag(os.path.join(bag_dir, bag_name))
-    # bag_after = rosbag.Bag(os.path.join(bag_dir + 'edited', bag_name))
-    # plotbag(bag_before, 'before')
-    # plotbag(bag_after, 'after')
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/all/"
+    dir_list = os.listdir(bag_dir)
+    dir_list.sort()
+    for bag_name in dir_list:
+        # bag_name = dir_list[8]
+        print(bag_name)
+        bag_before = rosbag.Bag(os.path.join("/home/hszlyw/Documents/airhockey/20210224/all", bag_name))
+        # bag_after = rosbag.Bag(os.path.join(bag_dir , bag_name))
+        plotbag(bag_before, 'before')
+        # plotbag(bag_after, 'after')
 
 
-    plot_obj()
-    plt.show()
+        # plot_obj()
+        plt.show()

@@ -43,7 +43,7 @@ def get_segment_dataset(data, t_stamp, table):
     table.reshape(1,7)
     shortrim_set = []
     longrim_set = []
-    margin = 0.3
+    margin = 0.1
     for i, t in enumerate(t_stamp):
         if data[t, 1] > table[0] + 0.98 - margin or data[t, 1] < table[0] - 0.98 + margin:
             # print(t, "short")
@@ -144,18 +144,19 @@ def plt_segment(set):
         #     fig2.show()
 
 def segment2file():
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/1204 bags"
+    # bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/1204 bags"
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/all"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
-    writename1 = 100
-    writename2 = 100
+    writename1 = 0
+    writename2 = 0
 
     for bag_name in dir_list:
         bag = rosbag.Bag(os.path.join(bag_dir, bag_name))
         # print(bag_name)
         bagdata, table = read_bag(bag)
-        table = [np.array([1.7, 0.85, 0.11945, 0., 0., 0., 1.]) ]
+        # table = [np.array([1.7, 0.85, 0.11945, 0., 0., 0., 1.]) ]
         t_stamp = get_collide_stamp(bagdata)
         # plotdata(bagdata, 'bag', t_stamp)
         # print(table)
@@ -165,8 +166,8 @@ def segment2file():
 
         # shortdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/shortrim_collision/")
         # longdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/longrim_collision/")
-        shortdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/1204short/")
-        longdir = os.path.join("/home/hszlyw/Documents/airhockey/rosbag/edited" + "/1204long/")
+        shortdir = os.path.join("/home/hszlyw/Documents/airhockey/20210224" + "/all_short/")
+        longdir = os.path.join("/home/hszlyw/Documents/airhockey/20210224" + "/all_long/")
         for i in range(len(shortrim_set)):
             short_datadir = os.path.join(shortdir + str(writename1) + ".txt")
 
@@ -194,9 +195,8 @@ def segment2file():
                 file.close()
                 writename2 += 1
 
-
-if __name__ == "__main__":
-    bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/dataset_long/"
+def getbagdata():
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/all_short/"
 
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
@@ -204,6 +204,32 @@ if __name__ == "__main__":
     #
     for i in range(len(dir_list)):
         filename = dir_list[i]
+        # filename = "18.txt"
+
+        print(filename)
+        data = []
+
+        with open(bag_dir + filename, 'r') as f:
+            # with open(bag_dir+'8.txt', 'r') as f:
+
+            for line in f:
+                data.append(np.array(
+                    np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").replace("\n", "").split())))
+            data = np.array(data)
+
+
+
+if __name__ == "__main__":
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/all_short/"
+
+    dir_list = os.listdir(bag_dir)
+    dir_list.sort()
+
+    #
+    for i in range(len(dir_list)):
+        filename = dir_list[i]
+        # filename = "18.txt"
+
         print(filename)
         data = []
 
@@ -211,7 +237,7 @@ if __name__ == "__main__":
         # with open(bag_dir+'8.txt', 'r') as f:
 
             for line in f:
-                data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").split() ) ))
+                data.append(np.array(np.float64(line.replace("[", " ").replace("]", " ").replace(",", " ").replace("\n", "").split() ) ))
             data = np.array(data)
             plt.plot(data[1:, 1], data[1:, 2], label=filename)
         plt.legend()

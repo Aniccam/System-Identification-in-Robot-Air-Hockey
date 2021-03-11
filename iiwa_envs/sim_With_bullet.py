@@ -8,6 +8,9 @@ from scipy import signal
 import pybullet as p
 import pybullet_data
 import math
+from angles import *
+
+
 class Model:
     def __init__(self, parameters, init_pos, init_vel):
         """
@@ -16,14 +19,15 @@ class Model:
         :param init_pos:
         :param init_vel:
         """
-        #          parameters = [0.89999997588924,0.07727587968111038, 0.8999999761581421, 0.0117223169654607771]
-        self.t_lateral_f = 0.000000472   # friction
+
+        self.t_lateral_f = parameters[4] # friction
         self.left_rim_res = parameters[0]  #  resititution
         self.right_rim_res = parameters[0]  # restitution
         self.left_rim_f = parameters[1] # friction
 
         self.four_side_rim_res = parameters[2] # restitution
         self.four_side_rim_latf = parameters[3]  # friction
+        self.damp =  parameters[5]# 0.0045
         # self.angvel = parameters[5]
 
 
@@ -64,7 +68,7 @@ class Model:
         if mode == "GUI":
             self.mode = "GUI"
             p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
-            p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
+            p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.4])
         elif mode == "DIRECT":
             p.connect(p.DIRECT)
         else:
@@ -77,17 +81,21 @@ class Model:
 
         path_robots = "/home/hszlyw/PycharmProjects/ahky/robots"
         # tablesize [2.14 x 1.22]
-        file = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
+        file1 = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
         # self.table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
-        self.table = p.loadURDF(file, list(table[:3]), list(table[3:]))
-        file = os.path.join(path_robots, "models", "puck", "model2.urdf")
+        self.table = p.loadURDF(file1, list(table[:3]), list(table[3:]))
+        file2 = os.path.join(path_robots, "models", "puck", "model2.urdf")
         # self.puck = p.loadURDF(file, puck_poses[0, 0:3], [0, 0, 0.0, 1.0], flags=p.URDF_USE_IMPLICIT_CYLINDER)
-        self.puck = p.loadURDF(file, self.init_pos, [0, 0, 0.0, 1.0],flags=p.URDF_USE_INERTIA_FROM_FILE or p.URDF_MERGE_FIXED_LINKS)
+        self.puck = p.loadURDF(file2, self.init_pos, [0, 0, 0.0, 1.0],flags=p.URDF_USE_INERTIA_FROM_FILE or p.URDF_MERGE_FIXED_LINKS)
+
         j_puck = self.get_joint_map(self.puck)
         j_table = self.get_joint_map(self.table)
+        tableshape = p.getCollisionShapeData(self.table, j_table.get(b'base_joint'))
+        puckshape = p.getCollisionShapeData(self.puck, -1)
+
         p.changeDynamics(self.puck, -1, lateralFriction=1)
         p.changeDynamics(self.puck, -1, restitution=1)
-        p.changeDynamics(self.puck, -1, linearDamping=0.0006)
+        p.changeDynamics(self.puck, -1, linearDamping=self.damp)
 
         # p.changeDynamics(self.puck, -1, restitution=0.8)
 
@@ -127,7 +135,7 @@ class Model:
         t_sim = [0]  # record time
         t = 0
         p.setTimeStep(1 / 120.)
-        while (np.abs(np.array(p.getBaseVelocity(self.puck)[0][:-1])) > .5).any() and .115< np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) < 1.2:
+        while (np.abs(np.array(p.getBaseVelocity(self.puck)[0][:-1])) > .1).any() and .115< np.abs(p.getBasePositionAndOrientation(self.puck)[0][2]) < 1.2:
         # while True:
             p.stepSimulation()
             # time.sleep(1/120.)
@@ -180,17 +188,41 @@ def back_process(slope):
 
             else:
                 continue
-def vel2initvel(vel,bagdata):
-    tan_theta = (bagdata[20, 1:3] - bagdata[0, 1:3])[1] / (bagdata[20, 1:3] - bagdata[0, 1:3])[0]
-    cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1)
-    sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1)
-    initori = np.array([cos_theta, sin_theta])
+def vel2initvel(vel,bagdata, begin_idx):
+    margin = 4
+    theta = np.arctan2(bagdata[begin_idx+margin, 2] - bagdata[begin_idx, 2],  bagdata[begin_idx+margin, 1] - bagdata[begin_idx, 1] )
+    # cos_theta = 1 / np.sqrt(np.square(tan_theta) + 1) * np.sign(bagdata[begin_idx+margin, 1] - bagdata[begin_idx, 1])
+    # sin_theta = tan_theta / np.sqrt(np.square(tan_theta) + 1) * np.sign(bagdata[begin_idx+margin, 2] - bagdata[begin_idx,2])
+
+    initori = np.array([np.cos(theta), np.sin(theta)])
 
     # get whole speed
-    begin_slice = vel[:10, :]
-    lin_init_speed = np.linalg.norm(np.max(np.abs(begin_slice), axis=0)[:2])   # root(x**2 + y** 2)
-    ang_init_vel = np.max(np.abs(vel[:10, 3:]), axis=0)
-    return lin_init_speed * initori, ang_init_vel
+
+    lin_init_speed = np.linalg.norm(np.mean(vel[begin_idx:begin_idx+margin, :2], axis=0) ) # root(x**2 + y** 2)
+
+    angs = bagdata[:, -1]
+    ang_ls= np.zeros((len(angs), 1))
+    ang_ls[0, 0] = angs[0]
+    for i,a in enumerate(angs):
+        if i == len(angs)-1:
+            break
+        ang_ls[i+1, 0] = shortest_angular_distance(angs[i], angs[i+1]) + ang_ls[i]
+
+    ang_init_vel = (ang_ls[begin_idx+margin-1] - ang_ls[begin_idx]) / (bagdata[begin_idx+margin-1, 0] - bagdata[begin_idx, 0])
+    return np.hstack(( np.hstack((lin_init_speed * initori, 0)), [0, 0, ang_init_vel] ))
+    # for i, ang_vel in enumerate(ang_vels):
+    #     if i >= len(ang_vels) - 2:
+    #         ang_init_vel = ang_vels[25]
+    #         print("ang estimate may not acurate")
+    #         return np.hstack(( np.hstack((lin_init_speed * initori, 0)), [0, 0, ang_init_vel] ))
+    #     elif ang_vel * ang_vels[i-1] > 0 and np.linalg.norm(ang_vel - ang_vels[i-1]) < 1 and np.linalg.norm(ang_vel - ang_vels[i+1]) < 1 and ang_vel * ang_vels[i+1] > 0 :
+    #         ang_init_vel = ang_vel
+    #         return np.hstack(( np.hstack((lin_init_speed * initori, 0)), [0, 0, ang_init_vel] ))
+    #     else:
+    #         continue
+
+
+
 
 def get_Err(bagdata, simdata):
 
@@ -202,15 +234,15 @@ def get_Err(bagdata, simdata):
             if i+h > simdata.shape[0] or idx+h > simdata.shape[0]:
                 break
             errs = np.linalg.norm(
-                    (bagdata[i, 1:3]* np.ones((h, 2)) - simdata[idx:idx+h, 1:-1]), axis=1
+                    (bagdata[i, 1:3]* np.ones((h, 2)) - simdata[idx:idx+h, 1:3]), axis=1
                 )
-            err = np.min(errs) * np.exp(-0.005 * simdata[i, 0])
+            err = np.min(errs) * np.exp(-0.004 * i)
             Err.append(err)
             idx = np.argmin(errs, axis=0) + i
             idxs.append(idx)
-        return np.sum(Err)
+        return np.sum(Err) / len(Err)
 
-def runbag(bagdata):
+def runbag(bagdata, table_):
         p.connect(p.GUI, 1234)  # use build-in graphical user interface, p.DIRECT: pass the final results
         p.resetDebugVisualizerCamera(cameraDistance=0.45, cameraYaw=-90.0, cameraPitch=-89, cameraTargetPosition=[1.55, 0.85, 1.])
 
@@ -221,7 +253,7 @@ def runbag(bagdata):
 
         path_robots = "/home/hszlyw/PycharmProjects/ahky/robots"
         file = os.path.join(path_robots, "models", "air_hockey_table", "model.urdf")
-        table = p.loadURDF(file, [1.7, 0.85, 0.117], [0, 0, 0.0, 1.0])
+        table = p.loadURDF(file, list(table_[:3]), list(table_[3:]) )
         file = os.path.join(path_robots, "models", "puck", "model2.urdf")
         readidx = 0
         lastpuck = np.hstack((bagdata[readidx, 1:3], 0.11945))
@@ -292,6 +324,8 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
 
 
     def get_collide_point(data):
+        b_idxs = []
+        a_idxs = []
         # print(data.shape)
         h = 3
         for i in range(h, data.shape[0]):
@@ -311,15 +345,11 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
                 before_collide_idx = i
                 after_collide_idx = i + 2*h
                 # print("2")
-
                 return before_collide_idx, after_collide_idx
-
             else:
                 # print("3")
 
                 continue
-
-
 
 
     # if mode == 'GUI':
@@ -334,6 +364,7 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
     y_lb = table[1] - 0.54
     margin = 6
     b_b, b_a = get_collide_point(bagdata)
+
     # print("bb ba",b_b, b_a)
     # print("bagdatashape", bagdata.shape[0])
 
@@ -379,19 +410,18 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
 
             delta_bag = np.abs(ang_bag[0] - ang_bag[1])
             delta_sim = np.abs(ang_sim[0] - ang_sim[1])
-            loss_ang = np.log( np.abs(delta_bag - delta_sim) + 1)
+            # loss_ang = np.log( np.abs(delta_bag - delta_sim) + 1)
+            loss_ang = np.abs(delta_bag - delta_sim)
 
 
             return loss_ang
-            #############################################
+            ############################################
 
-            # ################   linear loss till the end #############
-            #
+            ################   linear loss till the end #############
+
             # endx_ub =  y_lb < (
             #         (bagdata[b_a + margin, 2] - bagdata[b_a, 2] ) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1] ) * (x_ub - bagdata[b_a, 1]) + bagdata[b_a, 2]
             # ) < y_ub
-            #
-            #
             #
             # endx_lb = y_lb < (
             #         (bagdata[b_a + margin, 2] - bagdata[b_a, 2] ) / (bagdata[b_a + margin, 1] - bagdata[b_a, 1] ) * (x_lb - bagdata[b_a, 1]) + bagdata[b_a, 2]
@@ -428,7 +458,7 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
             #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
             #     # print("*" * 100)
             #
-            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #     return np.log(loss_dis * 1000 + 1) + 2 * loss_ang
             #
             # elif (simdata[s_a + margin, 1] - simdata[s_a, 1] < 0 ) and endx_lb:
             #     y3_b = (
@@ -446,7 +476,7 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
             #     # print("*" * 100)
             #
             #
-            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #     return np.log(loss_dis * 1000 + 1) + 2*loss_ang
             #
             # elif (simdata[s_a + margin, 2] - simdata[s_a, 2] > 0 ) and endy_ub:
             #     x3_b = (
@@ -465,7 +495,7 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
             #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
             #     # print("*" * 100)
             #
-            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #     return np.log(loss_dis * 1000 + 1) + 2*loss_ang
             #
             # elif (simdata[s_a + margin, 2] - simdata[s_a, 2] < 0 ) and endy_lb:
             #     x3_b = (
@@ -484,17 +514,17 @@ def Lossfun2(bagdata, simdata, table, mode='GUI'):
             #     # print("angloss=", loss_ang)
             #     # print("dissweight=", np.log(loss_dis * 1000 + 1) / (np.log(loss_dis * 1000 + 1) + loss_ang))
             #     # print("*" * 100)
-            #     return np.log(loss_dis * 1000 + 1) + loss_ang
+            #     return np.log(loss_dis * 1000 + 1) + 2*loss_ang
             #
             # else:
             #     # print("bug at estimate end point")
             #     return 180.3334
-            #
+
 
 
 if __name__ == "__main__":
 
-    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/long_side"
+    bag_dir = "/home/hszlyw/Documents/airhockey/20210224/all_long/2020/"
     # bag_dir = "/home/hszlyw/Documents/airhockey/rosbag/edited/bagfiles/"
     dir_list = os.listdir(bag_dir)
     dir_list.sort()
@@ -505,7 +535,8 @@ if __name__ == "__main__":
     count = 0
     Loss = 0
     for filename in dir_list:
-        # filename = dir_list[5]
+        # filename = "2021-02-24-15-09-02.bag"
+        filename = dir_list[0]
         bag = rosbag.Bag(os.path.join(bag_dir, filename))
         # filename = "111.txt"
         print(filename)
@@ -529,56 +560,84 @@ if __name__ == "__main__":
 
 
         lin_ang_vel = get_vel(bagdata.copy())  # return [n,6]
-        begin_idx = np.argmax(np.abs(lin_ang_vel[:, 1]))
-        init_pos = np.hstack((bagdata.copy()[begin_idx, 1:3], 0.11945)) # [3,]
+        # begin_idx = np.argmax(np.abs(lin_ang_vel[:10, 1]))
+        for i, vel in enumerate(lin_ang_vel):
+            if ( np.abs(vel[0:2]) > 0.1 ).any() and ( np.abs(lin_ang_vel[i+2, 0:2]) > 0.1 ).any():
+                begin_idx = i + 10
+                break
+            else:
+                continue
 
+        init_pos = np.hstack((bagdata.copy()[0, 1:3], 0.11945)) # [3,]
         #  get init vel + vel at z direction
 
         ###########
+        # plt.plot(bagdata[:,1], bagdata[:,2])
+        # plt.scatter(bagdata[0,1], bagdata[0,2], color='r', s=10)
+        # plt.scatter(bagdata[begin_idx,1], bagdata[begin_idx,2], color='b', s=10)
+        #
+        # plt.show()
 
-        init_vel = lin_ang_vel[begin_idx, :]
+
+        # init_vel = lin_ang_vel[begin_idx, :]
 
 
-        # lin_vel, ang_vel = vel2initvel(lin_ang_vel, bagdata.copy())
-        # init_vel = np.hstack ((np.hstack((lin_vel, 0)), ang_vel  ))
+        init_vel = vel2initvel(lin_ang_vel, bagdata.copy(), begin_idx) # In [n,7]
 
     #  run bag
-    #     runbag(bagdata.copy())
-        plt.plot(bagdata[:, 1], bagdata[:, 2])
-        plt.show()
-        # parameters = [0.89999997588924,0.0862029979358403, 0.8999999761581421, 0.0117223169654607771]  # loss is angle
+    #     runbag(bagdata.copy(), table)
+
+        parameters = [0.89999997588924,0.0862029979358403, 0.8999999761581421, 0.0117223169654607771]  # loss is angle
         # parameters = [0.8999985117910535, 0.08618541772442043,0.699999988079071, 0.4000000059604645] # loss is dis
         shortparams= [0.699999988079071, 0.4000000059604645, ]
-        parameters = [ 0.8254059088662781,0.10319242853023827, 0.9299991355795136,0.014490739442408085, 0.010485903276094338]
+        # parameters = [ 0.8254059088662781,0.10319242853023827, 0.9299991355795136,0.014490739442408085, 0.010485903276094338]
+        parameters_comb = [0.5692870164606006, 0.5728446366428586,0.7815188983391684, 0.7779911832945189, 9.459688616606632e-06, 0.06995505922640383]
+        parameters_puredis = [0.5000000333785332, 0.47638183117953, 0.015380650174596779, 0.751316530185423, .001, 0.07833489775657654]
+        parameters_ang2dis1 = [0.6588862055555563, 0.5588022042031872,0.7120770515310699,0.48903109637226916, 0.005036661922042332, 0.0055209567542747985]
+        parameters_pureang= [0.5004560623165386, 0.5697433172992706,0.9146034553520569,0.7792704235951046,0.006211612598792474, 0.04577464769528256]
+        parameters_angtimesdis= [0.5016025459847976, 0.4586099838084054, 0.681699731320961, 0.13918265930921014,0.000000472,  0.000000609]
+        params_27bagsmult = [0.5350643232102498, 0.019638493115294142, 0.6041054989098973, 0.07778764783505487, 0.001162435774030039,0.0008092878072303286]
+        params_27bagsmult0003ex=[0.5948782061362958, 0.6767296591391992, 0.74488450111527, 0.7573606599450943, 0.014027191373899347, 0.0004118297628308313]
+        params_aus1 = [0.7322243090496859, 0.40040546232180796, 0.7182018939691728, 0.3882585465536242, 0.008124363608658314, 0.0009918306660691937]
+        params_aus2 = [0.7154416441917419, 0.773118393744553, 0.7803165912628174, 2.195339187958629e-13, 0.001052391016855836, 0.0009999909671023488]
+        param_aus3_dis_long = [ 0.929532964993739, 0.13050455779452633, 0.8377456665039062, 0.12618421915495376, 0.0024844819473709067, 0.0004477310517563276]
+        param_aus4_ang_long = [0.7781064712815549, 0.7999377967389442, 0.9300000000991063, 0.05591317113149914, 8.882570546120405e-05, 0.00018898608384461957]
+        param_aus3_dis_short = [0.8377456665039062, 0.12618421915495376]
+        param_aus4_dis_short = [0.9300000000991063, 0.05591317113149914]
 
-        model = Model(parameters, init_pos, init_vel)
-
-
+        # param_aus5_short_dis =
+        # param_aus6_short_ang =
+        model = Model(param_aus3_dis_long, init_pos, init_vel)
         t_sim, sim_pos, _ = model.sim_bullet(table, 'DIRECT')  # [n,] [n,3] [n,3]
         simdata = np.hstack((t_sim, sim_pos))   # [n,4]
 
-        plt.figure(figsize=(19.6, 10.4))
+        # fig = plt.figure()
         plt.plot(bagdata[:,1], bagdata[:,2], label="bagdata", marker= '.' )
         plt.plot(simdata[:,1], simdata[:,2], label="simdata", marker= '.')
         plt.title(filename)
-        plt.legend()
-        plt.show()
-        # plt.savefig("/home/hszlyw/PycharmProjects/ahky/iiwa_envs/results_v1/traj/"+ filename+'.png', dpi=300)
 
-        print("number", count)
+        plt.axis("equal")
+        plt.legend()
+
+        # plt.savefig("/home/hszlyw/PycharmProjects/ahky/iiwa_envs/results_v1/traj/"+ filename+'.png', dpi=300)
+        loss = get_Err(bagdata.copy(), simdata.copy())
+        loss2 = Lossfun2(bagdata.copy(), simdata.copy(), table, 'DIRECT')
+        print("number", count, '\n', "lossdis", loss, '\n', "lossang", loss2)
         #  data processing
-        loss = Lossfun2(bagdata.copy(), simdata.copy(), table)
+        # loss = Lossfun2(bagdata.copy(), simdata.copy(), table)
         # print("loss value in grad = ", loss )
         # Loss = Loss + loss
         # # plt.show()
         # print("Loss value in grad = ", Loss )
         # count += 1
         # # get time index where collision happens
-        print("saved")
+        # print("saved")
         # calculate Loss: Err of angle
+        import imageio
 
-
-
+        im = imageio.imread('imageio:astronaut.png')
+        plt.show()
+        None
 
 
 
