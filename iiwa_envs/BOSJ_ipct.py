@@ -18,7 +18,7 @@ def obj(params, table, bagdata) -> np.ndarray:
         simdata = np.hstack((t_sim, sim_pos))
         # loss = Lossfun(bagdata.copy(), simdata, 'DIRECT')
         loss_ang = Lossfun2(bagdata.copy(), simdata.copy(), table, 'DIRECT')
-        loss_dis = get_Err(bagdata, simdata)
+        # loss_dis = get_Err(bagdata, simdata)
         if loss_ang == 180.3334:
             loss = loss_ang
             print("180.3334 fehler:", filename)
@@ -31,7 +31,7 @@ def obj(params, table, bagdata) -> np.ndarray:
         # plt.show()
 
 
-        out[i] = loss_dis
+        out[i] = loss_ang
     return out
 
 
@@ -45,11 +45,11 @@ if __name__ == "__main__":
 
 #  [t_lateral_f, left_right_rim_res, left_rim_f, four_side_rim_res, four_side_rim_latf, angvel]  [5,]
     param_list = [
-        {'name': 'res', 'type': 'num', 'lb': .5, 'ub': .93},
+        {'name': 'res', 'type': 'num', 'lb': .5, 'ub': .95},
         {'name': 'f', 'type': 'num', 'lb': 0., 'ub': .8}
 
     ]
-  #{'name': 'latf', 'type': 'num', 'lb': .01, 'ub': .09}
+    np.random.seed(99)
     space = DesignSpace().parse(param_list)
     opt = HEBO(space)
 
@@ -63,22 +63,20 @@ if __name__ == "__main__":
                         )
 
 
-    #,'latf': [.04, .06, .07, .08, .06, .065, .09, .021]
-    # filename = "24.txt"
-    # print(filename)
+
     data = []
 
     objs = []
     params = []
     n_sugg = 15
-    fileHeader = ["iters", "res", "f", "objs" ]
-    with open("/home/hszlyw/PycharmProjects/ahky/iiwa_envs/results_v1/zum Ausarbeitung/ipct_short_dis/" + "ipct_short_dis", 'w') as csvfile:
+    fileHeader = ["iters", "res", "f",  "objs" ]
+    with open("/home/hszlyw/PycharmProjects/ahky/iiwa_envs/results_v1/zum Ausarbeitung2/seg_ang/short/" + "test", 'w') as csvfile:
         cw = csv.writer(csvfile)
         cw.writerow(fileHeader)
 
 
 
-        for iter in range(75):
+        for iter in range(70):
             rec = opt.suggest(n_suggestions=n_sugg)
             # obj_value = np.zeros((n_sugg, 1)) # nrows = n_suggestions
             obj_value = []
@@ -150,18 +148,19 @@ if __name__ == "__main__":
 
 
             print('iter', iter)
+            print('file', 99)
             #
             print("Current: ", "objective: {} ".format(mean_obj[0, 0]),
                   "parameter: [res: {}, "
-                  "f: {},".format(rec.res.values[0],
+                  "f: {},"
+                  .format(rec.res.values[0],
                            rec.f.values[0],
-
                                          print("Best: ", "objective: {} ".format(opt.y.min()),
                   "parameter: [res: {}, "
-                  "f: {}, ".format(
+                  "f: {}, "
+                                               .format(
                                                  opt.X.iloc[opt.y.argmin()]['res'],
                                                  opt.X.iloc[opt.y.argmin()]['f']
-
-                  ) ))
+            ) ))
                   )
 
